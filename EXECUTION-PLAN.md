@@ -580,3 +580,4 @@ If ADK is too complex or buggy:
 - [ ] **16:00**: Backup demo video recorded
 - [ ] **16:30**: Pitch rehearsed 2+ times, Q&A answers practiced
 - [ ] **Pre-demo**: Photos load, API quota OK, laptop charged, backup video ready
+- [ ] **Test**
