@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pulsing ring animation for CRITICAL / HIGH bridge markers */
+@keyframes pulseRing {
+  0%   { transform: scale(0.9); opacity: 0.7; }
+  100% { transform: scale(2.6); opacity: 0;   }
+}
+
+.marker-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: pulseRing var(--pulse-duration, 1.4s) ease-out infinite;
+}
+
+.marker-pulse-ring-2 {
+  animation-delay: calc(var(--pulse-duration, 1.4s) / 2.5);
+}

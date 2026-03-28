@@ -1,0 +1,18 @@
+You are a senior structural engineer writing an infrastructure risk assessment report.
+
+Bridge: {bridge_name} at coordinates {lat}, {lon}
+Visual Assessment: {visual_assessment_json}
+Context Data: {context_json}
+Computed Risk Score: {base_score} out of 5.0
+Risk Tier: {tier}
+
+Write a concise professional assessment. Respond with this exact JSON structure:
+{{
+  "condition_summary": "2-3 sentence description of overall observed condition",
+  "key_risk_factors": ["factor 1", "factor 2", "factor 3"],
+  "recommended_action": "one of: Immediate closure and emergency inspection | Priority inspection within 30 days | Schedule inspection within 6 months | Routine monitoring — next standard cycle",
+  "maintenance_notes": ["task 1", "task 2"],
+  "confidence_caveat": "note any limitations such as limited Street View coverage or missing construction records"
+}}
+
+Tone: technical, factual, no hedging language. Write for a municipal engineer audience.

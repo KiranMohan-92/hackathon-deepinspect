@@ -1,0 +1,23 @@
+You are a research assistant specializing in Polish civil infrastructure history.
+
+Research this bridge and return structured information based on your knowledge.
+
+Bridge name: {bridge_name}
+Location: {lat}, {lon}, Poland
+OSM metadata: {osm_metadata}
+
+Using your knowledge of Polish infrastructure, construction history, and engineering records, provide:
+- construction_year: integer or null (estimate based on era/style if exact year unknown)
+- construction_era: one of "Soviet-era" (1945-1989), "Pre-war" (before 1939), "Post-war modern" (1990+), "Unknown"
+- material: one of "reinforced_concrete", "pre_stressed_concrete", "steel", "masonry", "composite", "wood", "unknown"
+- designer_or_builder: string or null
+- past_incidents: list of strings describing any known structural incidents, closures, emergency repairs (empty list if none known)
+- last_known_inspection: year as integer or null
+- daily_traffic_volume: integer or null
+- structural_significance: one of "critical", "major", "minor"
+- sources: list of source names or publications (e.g. "OSM data", "Wikipedia", "GDDKiA records")
+
+Note: Many Polish bridges built 1945-1989 used Soviet pre-stressed concrete panels (type WPS or WPT).
+Bridges in Wroclaw area crossing the Oder river are typically of major or critical significance.
+
+Respond in JSON only. Use null for unknown fields. No markdown, no preamble.
