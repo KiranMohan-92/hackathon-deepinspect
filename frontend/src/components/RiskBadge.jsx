@@ -1,12 +1,6 @@
 import { RISK_COLORS } from "../utils/riskColors";
-import type { RiskTier } from "../types";
 
-interface RiskBadgeProps {
-  tier: RiskTier;
-  score?: number | null;
-}
-
-export default function RiskBadge({ tier, score }: RiskBadgeProps) {
+export default function RiskBadge({ tier, score }) {
   const c = RISK_COLORS[tier] || RISK_COLORS.OK;
   return (
     <div className="flex items-center gap-2">

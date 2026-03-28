@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { BridgeRiskReport, DefectScore, VisualAssessment } from "../types";
-
-type DefectKey = "cracking" | "spalling" | "corrosion" | "surface_degradation" | "drainage" | "structural_deformation";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const HEADINGS = [
-  { value: 0,   label: "N" },
-  { value: 90,  label: "E" },
-  { value: 270, label: "W" },
-] as const;
+  { value: 0,   label: "N"  },
+  { value: 60,  label: "NE" },
+  { value: 120, label: "SE" },
+  { value: 180, label: "S"  },
+  { value: 240, label: "SW" },
+  { value: 300, label: "NW" },
+];
 
-const DEFECT_COLORS: Record<string, string> = {
+// Color per defect type
+const DEFECT_COLORS = {
   cracking:              "#EF4444",
   spalling:              "#F97316",
   corrosion:             "#92400E",
@@ -20,88 +21,89 @@ const DEFECT_COLORS: Record<string, string> = {
   structural_deformation:"#8B5CF6",
 };
 
-const DEFECT_KEYS: DefectKey[] = Object.keys(DEFECT_COLORS) as DefectKey[];
+const DEFECT_KEYS = Object.keys(DEFECT_COLORS);
 
-interface BridgeImageViewerProps {
-  bridge: BridgeRiskReport;
+function drawDefects(canvas, img, va) {
+  const w = img.offsetWidth;
+  const h = img.offsetHeight;
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  if (!va) return;
+
+  DEFECT_KEYS.forEach((key) => {
+    const defect = va[key];
+    if (!defect || defect.score < 2 || !defect.regions?.length) return;
+    const color = DEFECT_COLORS[key];
+
+    defect.regions.forEach((r) => {
+      const x  = r.x1 * w;
+      const y  = r.y1 * h;
+      const bw = (r.x2 - r.x1) * w;
+      const bh = (r.y2 - r.y1) * h;
+      if (bw <= 0 || bh <= 0) return;
+
+      ctx.fillStyle = color + "30";
+      ctx.fillRect(x, y, bw, bh);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, bw, bh);
+
+      const label = key.replace(/_/g, " ");
+      ctx.font = "bold 10px sans-serif";
+      const textW = ctx.measureText(label).width + 6;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, textW, 16);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(label, x + 3, y + 11);
+    });
+  });
 }
 
-interface ActiveDefect extends DefectScore {
-  key: string;
-}
-
-export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
+export default function BridgeImageViewer({ bridge }) {
   const [headingIdx, setHeadingIdx] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef    = useRef(null);
+  const canvasRef = useRef(null);
 
-  const va = bridge?.visual_assessment;
-  const osm_id = bridge?.bridge_id;
+  const osm_id  = bridge?.bridge_id;
   const heading = HEADINGS[headingIdx].value;
   const imageUrl = `${API_BASE}/api/images/${osm_id}/${heading}`;
 
+  // Per-heading assessment — falls back to the overall if not present
+  const perHeading = bridge?.per_heading_assessments || {};
+  const va = perHeading[String(heading)] ?? bridge?.visual_assessment ?? null;
+
+  // Reset when bridge changes
   useEffect(() => {
     setHeadingIdx(0);
     setImageLoaded(false);
     setImageError(false);
   }, [osm_id]);
 
+  // Reset image state when heading changes
   useEffect(() => {
     setImageLoaded(false);
     setImageError(false);
   }, [headingIdx]);
 
+  // Draw defect bounding boxes whenever image loads or heading changes
   useEffect(() => {
-    if (!imageLoaded || !canvasRef.current || !imgRef.current || !va) return;
+    if (!imageLoaded || !canvasRef.current || !imgRef.current) return;
+    drawDefects(canvasRef.current, imgRef.current, va);
+  }, [imageLoaded, va]);
 
-    const img = imgRef.current;
-    const canvas = canvasRef.current;
-    const w = img.offsetWidth;
-    const h = img.offsetHeight;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, w, h);
-
-    DEFECT_KEYS.forEach((key) => {
-      const d: DefectScore = va[key];
-      if (d.score < 2 || !d.regions?.length) return;
-      const color = DEFECT_COLORS[key];
-
-      d.regions.forEach((r) => {
-        const x = r.x1 * w;
-        const y = r.y1 * h;
-        const bw = (r.x2 - r.x1) * w;
-        const bh = (r.y2 - r.y1) * h;
-        if (bw <= 0 || bh <= 0) return;
-
-        ctx.fillStyle = color + "30";
-        ctx.fillRect(x, y, bw, bh);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, bw, bh);
-
-        const label = key.replace(/_/g, " ");
-        ctx.font = "bold 10px sans-serif";
-        const textW = ctx.measureText(label).width + 6;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, textW, 16);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, x + 3, y + 11);
-      });
-    });
-  }, [imageLoaded, va, headingIdx]);
-
-  const activeDefects: ActiveDefect[] = DEFECT_KEYS
-    .map((key) => ({ key, ...va![key] }))
-    .filter((d): d is ActiveDefect => d.score >= 2)
+  // Active defects from this heading's assessment
+  const activeDefects = DEFECT_KEYS
+    .map((key) => ({ key, ...(va?.[key] || {}) }))
+    .filter((d) => d.score >= 2)
     .sort((a, b) => b.score - a.score);
 
   return (
     <div className="flex flex-col">
+      {/* Image area */}
       <div className="relative bg-gray-900 overflow-hidden" style={{ minHeight: 160 }}>
         {!imageError ? (
           <>
@@ -121,13 +123,13 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
             />
           </>
         ) : (
-          <div className="flex items-center justify-center h-40 text-xs text-gray-500">
-            No Street View image cached for this angle.<br/>
-            Run the scan again to fetch imagery.
+          <div className="flex items-center justify-center h-40 text-xs text-gray-500 text-center px-4">
+            No Street View image cached for this angle.
           </div>
         )}
 
-        <div className="absolute bottom-2 right-2 flex gap-1">
+        {/* Heading selector */}
+        <div className="absolute bottom-2 right-2 flex gap-1 flex-wrap justify-end">
           {HEADINGS.map((h, i) => (
             <button
               key={h.value}
@@ -143,6 +145,7 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
           ))}
         </div>
 
+        {/* Score badge */}
         {va && (
           <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded font-medium">
             Visual score: {va.overall_visual_score?.toFixed(1)}/5
@@ -156,10 +159,11 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
         </div>
       )}
 
+      {/* Defect legend chips */}
       {activeDefects.length > 0 && (
         <div className="px-4 pt-3 pb-2">
           <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
-            Detected defects
+            Detected defects — {HEADINGS[headingIdx].label} view
           </p>
           <div className="flex flex-wrap gap-1.5">
             {activeDefects.map((d) => (
@@ -179,6 +183,7 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
         </div>
       )}
 
+      {/* Per-defect analysis */}
       {activeDefects.length > 0 && (
         <div className="px-4 pb-3 space-y-3">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -201,9 +206,7 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
                 </span>
               </div>
               {d.key_observations && (
-                <p className="text-xs text-gray-700 mb-1 leading-relaxed">
-                  {d.key_observations}
-                </p>
+                <p className="text-xs text-gray-700 mb-1 leading-relaxed">{d.key_observations}</p>
               )}
               {d.potential_cause && (
                 <p className="text-xs text-gray-400 leading-relaxed">
@@ -218,7 +221,7 @@ export default function BridgeImageViewer({ bridge }: BridgeImageViewerProps) {
 
       {va && activeDefects.length === 0 && (
         <div className="px-4 py-3 text-xs text-green-600">
-          No significant defects detected in available imagery.
+          No significant defects detected in this view.
         </div>
       )}
     </div>

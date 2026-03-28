@@ -14,7 +14,20 @@ class BridgeTarget(BaseModel):
     material: Optional[str] = None
     road_class: Optional[str] = None
     max_weight_tons: Optional[float] = None
-    street_view_available: bool = False
+    street_view_available: bool = True  # optimistic; discovered at analysis time
+
+
+class BridgeSummary(BaseModel):
+    """Lightweight record returned by /api/scan — no Gemini, no images."""
+    osm_id: str
+    name: Optional[str] = None
+    lat: float
+    lon: float
+    road_class: Optional[str] = None
+    construction_year: Optional[int] = None
+    material: Optional[str] = None
+    max_weight_tons: Optional[float] = None
+    priority_score: float = 1.0  # higher = more important to inspect first
 
 
 class BridgeRiskReport(BaseModel):
@@ -30,6 +43,7 @@ class BridgeRiskReport(BaseModel):
     maintenance_notes: list[str]
     confidence_caveat: str
     visual_assessment: Optional[VisualAssessment] = None
+    per_heading_assessments: dict[str, VisualAssessment] = {}  # str(heading) → assessment
     context: Optional[BridgeContext] = None
     generated_at: datetime
 

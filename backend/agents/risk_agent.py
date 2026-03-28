@@ -14,6 +14,7 @@ async def generate_report(
     bridge: BridgeTarget,
     visual: VisualAssessment | None,
     context: BridgeContext | None,
+    per_heading_assessments: dict | None = None,
 ) -> BridgeRiskReport:
     ctx = context or BridgeContext()
     base_score = compute_base_risk_score(visual, ctx)
@@ -42,6 +43,7 @@ async def generate_report(
     except Exception as e:
         print(f"[RiskAgent] Error for bridge {bridge.osm_id}: {e}")
 
+    per_heading = per_heading_assessments or {}
     try:
         return BridgeRiskReport(
             bridge_id=bridge.osm_id,
@@ -51,6 +53,7 @@ async def generate_report(
             risk_tier=tier,
             risk_score=round(base_score, 1),
             visual_assessment=visual,
+            per_heading_assessments=per_heading,
             context=ctx,
             generated_at=datetime.utcnow(),
             **narrative,
@@ -65,6 +68,7 @@ async def generate_report(
             risk_tier=tier,
             risk_score=round(base_score, 1),
             visual_assessment=visual,
+            per_heading_assessments=per_heading,
             context=ctx,
             generated_at=datetime.utcnow(),
             condition_summary="Assessment unavailable. Manual review required.",

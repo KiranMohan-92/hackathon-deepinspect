@@ -1,13 +1,12 @@
 import useAppStore from "../store/useAppStore";
 import { RISK_COLORS } from "../utils/riskColors";
-import type { RiskTier } from "../types";
 
-const TIERS: RiskTier[] = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
+const TIERS = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
 
 export default function StatsPanel() {
   const bridges = useAppStore((s) => s.bridges);
 
-  const counts = TIERS.reduce<Record<string, number>>((acc, t) => {
+  const counts = TIERS.reduce((acc, t) => {
     acc[t] = bridges.filter((b) => b.risk_tier === t).length;
     return acc;
   }, {});
