@@ -1,6 +1,11 @@
 import { jsPDF } from "jspdf";
+import type { BridgeRiskReport } from "../types";
 
-export default function ReportExport({ bridge }) {
+interface ReportExportProps {
+  bridge: BridgeRiskReport;
+}
+
+export default function ReportExport({ bridge }: ReportExportProps) {
   const download = () => {
     const doc = new jsPDF();
 

@@ -4,15 +4,16 @@ import MapView from "./components/MapView";
 import BridgePanel from "./components/BridgePanel";
 import ImageAnalysisModal from "./components/ImageAnalysisModal";
 import { RISK_COLORS } from "./utils/riskColors";
+import type { RiskTier } from "./types";
 
-const TIERS = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
+const TIERS: RiskTier[] = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
 
 export default function App() {
   const bridges  = useAppStore((s) => s.bridges);
   const isLoading = useAppStore((s) => s.isLoading);
   const error    = useAppStore((s) => s.error);
 
-  const counts = TIERS.reduce((acc, t) => {
+  const counts = TIERS.reduce<Record<string, number>>((acc, t) => {
     acc[t] = bridges.filter((b) => b.risk_tier === t).length;
     return acc;
   }, {});
@@ -20,15 +21,13 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <header className="flex items-center gap-4 px-5 py-2.5 bg-white border-b border-gray-200 shadow-sm flex-shrink-0 z-10">
-        {/* Brand */}
         <div className="flex items-baseline gap-2 mr-2">
           <span className="text-base font-bold text-gray-900 tracking-tight">DeepInspect</span>
           <span className="text-xs text-gray-400 hidden md:block">Bridge Risk · Poland</span>
         </div>
 
-        {/* Risk summary chips — only shown once bridges are loaded */}
         {bridges.length > 0 && (
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className="text-xs text-gray-400">{bridges.length} bridges</span>
@@ -49,7 +48,6 @@ export default function App() {
 
         <div className="flex-1" />
 
-        {/* Search + scan controls */}
         <SearchBar />
       </header>
 
@@ -67,16 +65,13 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Main content ───────────────────────────────────────────────────── */}
+      {/* Main content */}
       <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* Map fills remaining width */}
         <MapView />
-
-        {/* Side panel — fixed width, shows list → detail → empty */}
         <BridgePanel />
       </div>
 
-      {/* Image analysis modal — rendered above everything */}
+      {/* Image analysis modal */}
       <ImageAnalysisModal />
     </div>
   );

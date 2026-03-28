@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import useAppStore from "../store/useAppStore";
+import type { DefectScore, VisualAssessment } from "../types";
 
 const DEFECT_KEYS = [
   "cracking",
@@ -8,9 +9,9 @@ const DEFECT_KEYS = [
   "surface_degradation",
   "drainage",
   "structural_deformation",
-];
+] as const;
 
-const DEFECT_META = {
+const DEFECT_META: Record<string, { color: string; label: string }> = {
   cracking:              { color: "#EF4444", label: "Cracking" },
   spalling:              { color: "#F97316", label: "Spalling" },
   corrosion:             { color: "#92400E", label: "Corrosion" },
@@ -19,7 +20,11 @@ const DEFECT_META = {
   structural_deformation:{ color: "#8B5CF6", label: "Deformation" },
 };
 
-function scoreLabel(score) {
+interface ActiveDefect extends DefectScore {
+  key: string;
+}
+
+function scoreLabel(score: number) {
   if (score >= 5) return { text: "CRITICAL", cls: "text-red-700 bg-red-100" };
   if (score >= 4) return { text: "SEVERE",   cls: "text-red-600 bg-red-50" };
   if (score >= 3) return { text: "HIGH",     cls: "text-orange-600 bg-orange-50" };
@@ -27,8 +32,12 @@ function scoreLabel(score) {
   return           { text: "OK",         cls: "text-green-700 bg-green-50" };
 }
 
-// Draws defect bounding boxes on the canvas over the image
-function useDefectCanvas(imgRef, canvasRef, analysis, imageLoaded) {
+function useDefectCanvas(
+  imgRef: React.RefObject<HTMLImageElement | null>,
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  analysis: VisualAssessment | null,
+  imageLoaded: boolean
+) {
   useEffect(() => {
     if (!imageLoaded || !canvasRef.current || !imgRef.current || !analysis) return;
     const img = imgRef.current;
@@ -38,10 +47,11 @@ function useDefectCanvas(imgRef, canvasRef, analysis, imageLoaded) {
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
     DEFECT_KEYS.forEach((key) => {
-      const defect = analysis[key];
+      const defect = analysis[key] as DefectScore | undefined;
       if (!defect || defect.score < 2 || !defect.regions?.length) return;
       const { color } = DEFECT_META[key];
 
@@ -52,17 +62,14 @@ function useDefectCanvas(imgRef, canvasRef, analysis, imageLoaded) {
         const bh = (r.y2 - r.y1) * h;
         if (bw <= 0 || bh <= 0) return;
 
-        // Semi-transparent fill
         ctx.fillStyle = color + "28";
         ctx.fillRect(x, y, bw, bh);
 
-        // Border
         ctx.strokeStyle = color;
         ctx.lineWidth = 2.5;
         ctx.setLineDash([]);
         ctx.strokeRect(x, y, bw, bh);
 
-        // Label pill
         const label = DEFECT_META[key].label;
         ctx.font = "bold 11px system-ui, sans-serif";
         const tw = ctx.measureText(label).width + 10;
@@ -71,15 +78,19 @@ function useDefectCanvas(imgRef, canvasRef, analysis, imageLoaded) {
         const ly = y > th + 2 ? y - th - 2 : y + 2;
 
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.roundRect?.(lx, ly, tw, th, 4) ?? ctx.fillRect(lx, ly, tw, th);
-        ctx.fill();
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(lx, ly, tw, th, 4);
+          ctx.fill();
+        } else {
+          ctx.fillRect(lx, ly, tw, th);
+        }
 
         ctx.fillStyle = "#fff";
         ctx.fillText(label, lx + 5, ly + 13);
       });
     });
-  }, [imageLoaded, analysis]);
+  }, [imageLoaded, analysis, imgRef, canvasRef]);
 }
 
 export default function ImageAnalysisModal() {
@@ -88,41 +99,39 @@ export default function ImageAnalysisModal() {
   const clear     = useAppStore((s) => s.clearImageAnalysis);
 
   const [imageLoaded, setImageLoaded] = useState(false);
-  const imgRef    = useRef(null);
-  const canvasRef = useRef(null);
+  const imgRef    = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useDefectCanvas(imgRef, canvasRef, analysis, imageLoaded);
 
-  // Reset when modal opens with new image
   useEffect(() => { setImageLoaded(false); }, [fileUrl]);
 
-  // Close on Escape
   useEffect(() => {
-    const handler = (e) => { if (e.key === "Escape") clear(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") clear(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [clear]);
 
   if (!analysis || !fileUrl) return null;
 
-  const activeDefects = DEFECT_KEYS
-    .map((key) => ({ key, ...(analysis[key] || {}) }))
-    .filter((d) => d.score >= 2)
+  const activeDefects: ActiveDefect[] = DEFECT_KEYS
+    .map((key) => {
+      const defect = analysis[key] as DefectScore | undefined;
+      if (defect) return { key, ...defect };
+      return null;
+    })
+    .filter((d): d is ActiveDefect => d !== null && d.score >= 2)
     .sort((a, b) => b.score - a.score);
 
   const overallScore = analysis.overall_visual_score ?? 0;
   const overallLabel = scoreLabel(Math.round(overallScore));
 
   return (
-    // Backdrop
     <div
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) clear(); }}
     >
-      {/* Modal card */}
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <h2 className="text-base font-bold text-gray-900">Bridge Image Analysis</h2>
@@ -134,14 +143,11 @@ export default function ImageAnalysisModal() {
             onClick={clear}
             className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-lg"
           >
-            ×
+            x
           </button>
         </div>
 
-        {/* Body — split: image left, analysis right */}
         <div className="flex flex-1 overflow-hidden min-h-0">
-
-          {/* LEFT — Image with canvas overlay */}
           <div className="flex-1 bg-gray-950 flex items-center justify-center relative overflow-hidden">
             <img
               ref={imgRef}
@@ -157,19 +163,16 @@ export default function ImageAnalysisModal() {
               style={{ width: "100%", height: "100%", objectFit: "contain" }}
             />
 
-            {/* Score overlay badge */}
             <div className="absolute top-3 left-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full font-semibold">
               Visual score: {overallScore.toFixed(1)} / 5.0
             </div>
 
-            {/* Attention badge */}
             {analysis.requires_immediate_attention && (
               <div className="absolute top-3 right-3 bg-red-600 text-white text-xs px-3 py-1.5 rounded-full font-bold animate-pulse">
-                ⚠ Immediate attention required
+                Immediate attention required
               </div>
             )}
 
-            {/* Legend */}
             {activeDefects.length > 0 && (
               <div className="absolute bottom-3 left-3 bg-black/70 rounded-lg p-2 flex flex-col gap-1">
                 {activeDefects.map((d) => (
@@ -185,10 +188,7 @@ export default function ImageAnalysisModal() {
             )}
           </div>
 
-          {/* RIGHT — Analysis panel */}
           <div className="w-80 flex-shrink-0 flex flex-col border-l border-gray-100 overflow-y-auto">
-
-            {/* Overall score */}
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -198,7 +198,6 @@ export default function ImageAnalysisModal() {
                   {overallLabel.text}
                 </span>
               </div>
-              {/* Score bar */}
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
@@ -215,7 +214,6 @@ export default function ImageAnalysisModal() {
               <p className="text-xs text-gray-400 mt-1">{overallScore.toFixed(1)} / 5.0</p>
             </div>
 
-            {/* Summary */}
             {analysis.visible_defects_summary && (
               <div className="px-5 py-4 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -227,7 +225,6 @@ export default function ImageAnalysisModal() {
               </div>
             )}
 
-            {/* No defects */}
             {activeDefects.length === 0 && (
               <div className="px-5 py-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -239,7 +236,6 @@ export default function ImageAnalysisModal() {
               </div>
             )}
 
-            {/* Per-defect breakdown */}
             {activeDefects.length > 0 && (
               <div className="px-5 py-4 space-y-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -254,7 +250,6 @@ export default function ImageAnalysisModal() {
                       className="rounded-xl border p-3"
                       style={{ borderColor: meta.color + "40", backgroundColor: meta.color + "08" }}
                     >
-                      {/* Defect name + severity */}
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <div
@@ -271,7 +266,6 @@ export default function ImageAnalysisModal() {
                         </div>
                       </div>
 
-                      {/* What Gemini sees */}
                       {d.key_observations && (
                         <div className="mb-2">
                           <p className="text-xs font-medium text-gray-500 mb-0.5">Observation</p>
@@ -279,7 +273,6 @@ export default function ImageAnalysisModal() {
                         </div>
                       )}
 
-                      {/* Engineering cause */}
                       {d.potential_cause && (
                         <div>
                           <p className="text-xs font-medium text-gray-500 mb-0.5">Likely Cause</p>

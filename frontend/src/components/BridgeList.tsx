@@ -1,5 +1,6 @@
 import useAppStore from "../store/useAppStore";
 import { RISK_COLORS } from "../utils/riskColors";
+import type { RiskTier } from "../types";
 
 export default function BridgeList() {
   const bridges = useAppStore((s) => s.bridges);

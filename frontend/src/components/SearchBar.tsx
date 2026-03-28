@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useBridgeScan } from "../hooks/useBridgeScan";
 import useAppStore from "../store/useAppStore";
 
@@ -8,13 +8,13 @@ export default function SearchBar() {
   const { scan, loadDemo, analyzeImage } = useBridgeScan();
   const isLoading = useAppStore((s) => s.isLoading);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (query.trim()) scan(query.trim(), queryType);
   };
 
-  const handleFile = (e) => {
-    const file = e.target.files[0];
+  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) analyzeImage(file);
     e.target.value = "";
   };
@@ -24,7 +24,7 @@ export default function SearchBar() {
       ? "51.1079, 17.0385"
       : queryType === "bridge_lookup"
       ? "Most Grunwaldzki"
-      : "e.g. Warsaw, Kraków";
+      : "e.g. Warsaw, Krakow";
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export default function SearchBar() {
         disabled={isLoading || !query.trim()}
         className="px-3 py-1.5 text-xs font-semibold bg-gray-900 text-white rounded-lg disabled:opacity-40 hover:bg-gray-700 transition-colors"
       >
-        {isLoading ? "Scanning…" : "Scan"}
+        {isLoading ? "Scanning..." : "Scan"}
       </button>
 
       <button

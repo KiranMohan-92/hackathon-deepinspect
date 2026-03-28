@@ -4,15 +4,14 @@ import RiskBadge from "./RiskBadge";
 import ReportExport from "./ReportExport";
 import BridgeImageViewer from "./BridgeImageViewer";
 import BridgeList from "./BridgeList";
+import type { BridgeRiskReport, RiskTier } from "../types";
 
-// ─── Detail view when a bridge is selected ────────────────────────────────────
-function BridgeDetail({ bridge }) {
+function BridgeDetail({ bridge }: { bridge: BridgeRiskReport }) {
   const setSelectedBridge = useAppStore((s) => s.setSelectedBridge);
-  const { context: ctx } = bridge;
+  const ctx = bridge.context;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sticky header */}
       <div className="flex items-start justify-between px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="flex-1 mr-2">
           <p className="font-semibold text-sm text-gray-900 leading-snug">
@@ -34,14 +33,11 @@ function BridgeDetail({ bridge }) {
         </div>
       </div>
 
-      {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto">
-        {/* Street View + defect overlays */}
         <div className="border-b border-gray-100">
           <BridgeImageViewer bridge={bridge} />
         </div>
 
-        {/* Context metadata */}
         {ctx && (
           <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-2 gap-x-6 gap-y-2">
             {ctx.construction_year && (
@@ -77,7 +73,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* Condition summary */}
         {bridge.condition_summary && (
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -87,7 +82,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* Key risk factors */}
         {bridge.key_risk_factors?.length > 0 && (
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -96,7 +90,7 @@ function BridgeDetail({ bridge }) {
             <ul className="space-y-1">
               {bridge.key_risk_factors.map((f, i) => (
                 <li key={i} className="text-xs text-gray-700 flex gap-1.5">
-                  <span className="text-red-400 flex-shrink-0 mt-0.5">▸</span>
+                  <span className="text-red-400 flex-shrink-0 mt-0.5">&#9656;</span>
                   {f}
                 </li>
               ))}
@@ -104,7 +98,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* Recommended action */}
         {bridge.recommended_action && (
           <div
             className={`px-4 py-3 border-b border-gray-100 ${
@@ -128,7 +121,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* Maintenance notes */}
         {bridge.maintenance_notes?.length > 0 && (
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -137,7 +129,7 @@ function BridgeDetail({ bridge }) {
             <ul className="space-y-1">
               {bridge.maintenance_notes.map((n, i) => (
                 <li key={i} className="text-xs text-gray-700 flex gap-1.5">
-                  <span className="text-gray-400 flex-shrink-0">•</span>
+                  <span className="text-gray-400 flex-shrink-0">&#8226;</span>
                   {n}
                 </li>
               ))}
@@ -145,7 +137,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* Confidence caveat */}
         {bridge.confidence_caveat && (
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs text-gray-400 italic leading-relaxed">
@@ -154,7 +145,6 @@ function BridgeDetail({ bridge }) {
           </div>
         )}
 
-        {/* PDF export */}
         <div className="px-4 py-4">
           <ReportExport bridge={bridge} />
         </div>
@@ -163,7 +153,6 @@ function BridgeDetail({ bridge }) {
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-4">
@@ -176,7 +165,7 @@ function EmptyState() {
       <div>
         <p className="text-sm font-medium text-gray-700 mb-1">No bridges scanned yet</p>
         <p className="text-xs text-gray-400 leading-relaxed">
-          Enter a city name (e.g. Warsaw, Kraków) and click Scan, or try the Demo button for Wrocław.
+          Enter a city name (e.g. Warsaw, Krakow) and click Scan, or try the Demo button for Wroclaw.
         </p>
       </div>
       <p className="text-xs text-gray-400">
@@ -186,19 +175,17 @@ function EmptyState() {
   );
 }
 
-// ─── Loading state ────────────────────────────────────────────────────────────
 function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3">
       <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
       <p className="text-xs text-gray-500">
-        Scanning bridges — analysing Street View imagery…
+        Scanning bridges — analysing Street View imagery...
       </p>
     </div>
   );
 }
 
-// ─── Main side panel (orchestrates all states) ────────────────────────────────
 export default function BridgePanel() {
   const bridge = useAppStore((s) => s.selectedBridge);
   const bridges = useAppStore((s) => s.bridges);

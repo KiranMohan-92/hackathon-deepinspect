@@ -1,6 +1,32 @@
 import { create } from "zustand";
+import type { BridgeRiskReport, RiskTier, VisualAssessment } from "../types";
 
-const useAppStore = create((set, get) => ({
+type FilterTier = RiskTier | "ALL";
+
+interface AppState {
+  bridges: BridgeRiskReport[];
+  selectedBridge: BridgeRiskReport | null;
+  isLoading: boolean;
+  error: string | null;
+  activeFilter: FilterTier;
+
+  // Image analysis state
+  imageAnalysis: VisualAssessment | null;
+  imageFileUrl: string | null;
+
+  setBridges: (bridges: BridgeRiskReport[]) => void;
+  setSelectedBridge: (bridge: BridgeRiskReport | null) => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+  setActiveFilter: (filter: FilterTier) => void;
+
+  setImageAnalysis: (analysis: VisualAssessment, fileUrl: string) => void;
+  clearImageAnalysis: () => void;
+
+  filteredBridges: () => BridgeRiskReport[];
+}
+
+const useAppStore = create<AppState>((set, get) => ({
   bridges: [],
   selectedBridge: null,
   isLoading: false,

@@ -4,14 +4,14 @@ import L from "leaflet";
 import useAppStore from "../store/useAppStore";
 import { RISK_COLORS, RISK_MARKER_SIZE } from "../utils/riskColors";
 import { useBridgeScan } from "../hooks/useBridgeScan";
+import type { BridgeRiskReport, RiskTier } from "../types";
 
-const DEFAULT_CENTER = [51.1079, 17.0385]; // Wrocław
-const DEFAULT_ZOOM   = 6;                   // show all of Poland on first load
+const DEFAULT_CENTER: [number, number] = [51.1079, 17.0385];
+const DEFAULT_ZOOM   = 6;
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const TIERS = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
+const TIERS: RiskTier[] = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
 
-// ─── Custom marker icon factory ───────────────────────────────────────────────
-function makeIcon(tier) {
+function makeIcon(tier: RiskTier) {
   const c    = RISK_COLORS[tier] || RISK_COLORS.OK;
   const dot  = RISK_MARKER_SIZE[tier] || 8;
   const pulse = tier === "CRITICAL" || tier === "HIGH";
@@ -34,23 +34,21 @@ function makeIcon(tier) {
   });
 }
 
-// ─── Fly to fit all bridges when results arrive ───────────────────────────────
-function MapController({ bridges }) {
+function MapController({ bridges }: { bridges: BridgeRiskReport[] }) {
   const map = useMap();
   useEffect(() => {
     if (!bridges.length) return;
     if (bridges.length === 1) {
       map.flyTo([bridges[0].lat, bridges[0].lon], 15, { duration: 1.2 });
     } else {
-      const latlngs = bridges.map((b) => [b.lat, b.lon]);
+      const latlngs = bridges.map((b) => [b.lat, b.lon] as [number, number]);
       map.flyToBounds(latlngs, { padding: [50, 50], duration: 1.2, maxZoom: 15 });
     }
-  }, [bridges.length]); // eslint-disable-line
+  }, [bridges.length]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
-// ─── Track which bridges are inside the current viewport ──────────────────────
-function BoundsTracker({ allBridges, onUpdate }) {
+function BoundsTracker({ allBridges, onUpdate }: { allBridges: BridgeRiskReport[]; onUpdate: (b: BridgeRiskReport[]) => void }) {
   const map = useMap();
   const bridgesRef = useRef(allBridges);
   bridgesRef.current = allBridges;
@@ -70,41 +68,47 @@ function BoundsTracker({ allBridges, onUpdate }) {
   return null;
 }
 
-// ─── Render all visible markers with hover + click ────────────────────────────
-function BridgeMarkers({ bridges, onHover, onHoverClear, onSelect }) {
-  const map = useMap();
-  return bridges.map((bridge) => (
-    <Marker
-      key={bridge.bridge_id}
-      position={[bridge.lat, bridge.lon]}
-      icon={makeIcon(bridge.risk_tier)}
-      eventHandlers={{
-        mouseover: () => {
-          const pt = map.latLngToContainerPoint([bridge.lat, bridge.lon]);
-          onHover(bridge, { x: pt.x, y: pt.y });
-        },
-        mouseout: onHoverClear,
-        click: () => onSelect(bridge),
-      }}
-    />
-  ));
+interface MarkerProps {
+  bridges: BridgeRiskReport[];
+  onHover: (b: BridgeRiskReport, pos: { x: number; y: number }) => void;
+  onHoverClear: () => void;
+  onSelect: (b: BridgeRiskReport) => void;
 }
 
-// ─── Floating hover preview card ──────────────────────────────────────────────
-function HoverCard({ bridge, pos, containerRef }) {
+function BridgeMarkers({ bridges, onHover, onHoverClear, onSelect }: MarkerProps) {
+  const map = useMap();
+  return (
+    <>
+      {bridges.map((bridge) => (
+        <Marker
+          key={bridge.bridge_id}
+          position={[bridge.lat, bridge.lon]}
+          icon={makeIcon(bridge.risk_tier)}
+          eventHandlers={{
+            mouseover: () => {
+              const pt = map.latLngToContainerPoint([bridge.lat, bridge.lon]);
+              onHover(bridge, { x: pt.x, y: pt.y });
+            },
+            mouseout: onHoverClear,
+            click: () => onSelect(bridge),
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+function HoverCard({ bridge, pos, containerRef }: { bridge: BridgeRiskReport; pos: { x: number; y: number }; containerRef: React.RefObject<HTMLDivElement | null> }) {
   const [imgError, setImgError] = useState(false);
   const c = RISK_COLORS[bridge.risk_tier] || RISK_COLORS.OK;
 
   const CARD_W = 210;
   const containerW = containerRef.current?.offsetWidth || 800;
-  const containerH = containerRef.current?.offsetHeight || 600;
 
-  // Horizontal: centre on marker, clamp to edges
   let left = pos.x - CARD_W / 2;
   if (left < 8) left = 8;
   if (left + CARD_W > containerW - 8) left = containerW - CARD_W - 8;
 
-  // Vertical: prefer above, flip below if not enough room
   const CARD_H = 180;
   const top = pos.y - CARD_H - 16 > 8 ? pos.y - CARD_H - 16 : pos.y + 24;
 
@@ -114,7 +118,6 @@ function HoverCard({ bridge, pos, containerRef }) {
       style={{ left, top, width: CARD_W }}
     >
       <div className="bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden">
-        {/* Street View thumbnail */}
         {!imgError ? (
           <img
             src={`${API_BASE}/api/images/${bridge.bridge_id}/0`}
@@ -134,7 +137,6 @@ function HoverCard({ bridge, pos, containerRef }) {
           </div>
         )}
 
-        {/* Info */}
         <div className="px-3 py-2.5">
           <p className="text-xs font-semibold text-gray-900 leading-snug mb-1.5 line-clamp-2">
             {bridge.bridge_name || `Bridge ${bridge.bridge_id}`}
@@ -156,7 +158,6 @@ function HoverCard({ bridge, pos, containerRef }) {
         </div>
       </div>
 
-      {/* Down-arrow caret */}
       <div className="flex justify-center -mt-px">
         <div
           className="w-3 h-3 bg-white border-r border-b border-gray-100 rotate-45"
@@ -167,11 +168,10 @@ function HoverCard({ bridge, pos, containerRef }) {
   );
 }
 
-// ─── Viewport risk summary overlay ───────────────────────────────────────────
-function ViewportSummary({ visible, total }) {
+function ViewportSummary({ visible, total }: { visible: BridgeRiskReport[]; total: number }) {
   if (total === 0) return null;
 
-  const counts = TIERS.reduce((acc, t) => {
+  const counts = TIERS.reduce<Record<string, number>>((acc, t) => {
     acc[t] = visible.filter((b) => b.risk_tier === t).length;
     return acc;
   }, {});
@@ -203,7 +203,7 @@ function ViewportSummary({ visible, total }) {
       {criticalInView > 0 && (
         <div className="mt-2 pt-2 border-t border-red-100">
           <p className="text-xs font-bold text-red-600">
-            ⚠ {criticalInView} critical in view
+            {criticalInView} critical in view
           </p>
         </div>
       )}
@@ -211,7 +211,6 @@ function ViewportSummary({ visible, total }) {
   );
 }
 
-// ─── Scan this area button (inside MapContainer so it can read bounds) ────────
 function ScanViewportButton() {
   const map = useMap();
   const { scanViewport } = useBridgeScan();
@@ -239,11 +238,10 @@ function ScanViewportButton() {
         {isLoading ? (
           <>
             <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
-            Scanning…
+            Scanning...
           </>
         ) : (
           <>
-            {/* Crosshair icon */}
             <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <circle cx="12" cy="12" r="3" />
               <path strokeLinecap="round" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
@@ -256,12 +254,14 @@ function ScanViewportButton() {
   );
 }
 
-// ─── Filter chips floating above the map ─────────────────────────────────────
-function FilterBar({ allBridges, activeFilter, onFilter }) {
+type FilterTier = RiskTier | "ALL";
+
+function FilterBar({ allBridges, activeFilter, onFilter }: { allBridges: BridgeRiskReport[]; activeFilter: string; onFilter: (t: FilterTier) => void }) {
   if (!allBridges.length) return null;
+  const filterOptions: FilterTier[] = ["ALL", ...TIERS];
   return (
     <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] flex gap-1.5 flex-wrap justify-center px-3">
-      {["ALL", ...TIERS].map((tier) => {
+      {filterOptions.map((tier) => {
         const c     = tier === "ALL" ? null : RISK_COLORS[tier];
         const count = tier === "ALL"
           ? allBridges.length
@@ -287,7 +287,6 @@ function FilterBar({ allBridges, activeFilter, onFilter }) {
   );
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
 export default function MapView() {
   const allBridges      = useAppStore((s) => s.bridges);
   const filteredBridges = useAppStore((s) => s.filteredBridges());
@@ -295,12 +294,12 @@ export default function MapView() {
   const setActiveFilter = useAppStore((s) => s.setActiveFilter);
   const setSelectedBridge = useAppStore((s) => s.setSelectedBridge);
 
-  const [hoveredBridge, setHoveredBridge] = useState(null);
+  const [hoveredBridge, setHoveredBridge] = useState<BridgeRiskReport | null>(null);
   const [hoverPos,      setHoverPos]      = useState({ x: 0, y: 0 });
-  const [visibleBridges, setVisibleBridges] = useState([]);
-  const containerRef = useRef(null);
+  const [visibleBridges, setVisibleBridges] = useState<BridgeRiskReport[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleHover = useCallback((bridge, pos) => {
+  const handleHover = useCallback((bridge: BridgeRiskReport, pos: { x: number; y: number }) => {
     setHoveredBridge(bridge);
     setHoverPos(pos);
   }, []);
@@ -309,14 +308,12 @@ export default function MapView() {
 
   return (
     <div ref={containerRef} className="relative flex-1 min-w-0 overflow-hidden">
-      {/* Filter chips */}
       <FilterBar
         allBridges={allBridges}
         activeFilter={activeFilter}
         onFilter={setActiveFilter}
       />
 
-      {/* Hover preview card */}
       {hoveredBridge && (
         <HoverCard
           key={hoveredBridge.bridge_id}
@@ -326,10 +323,8 @@ export default function MapView() {
         />
       )}
 
-      {/* Viewport risk summary */}
       <ViewportSummary visible={visibleBridges} total={allBridges.length} />
 
-      {/* Map */}
       <MapContainer
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
