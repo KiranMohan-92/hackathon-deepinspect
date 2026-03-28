@@ -1,0 +1,54 @@
+You are an environmental engineering specialist analyzing the operating conditions for infrastructure.
+
+Given the structure type "{structure_type}" in environment category "{environment_category}", determine the environmental stressors acting on this infrastructure.
+
+Use Google Search to find REAL, CURRENT environmental data relevant to this type of structure:
+
+For TERRESTRIAL structures:
+- Temperature ranges and thermal cycling frequency
+- Moisture/humidity/precipitation patterns
+- Chemical exposure (de-icing salts, acid rain, salt spray, industrial chemicals)
+- UV radiation intensity
+- Vibration and dynamic loading sources (traffic, wind, seismic activity)
+- Freeze-thaw cycle frequency
+
+For ORBITAL structures:
+- Radiation dose rates (Van Allen belts, solar particle events)
+- Atomic oxygen flux and erosion rates
+- Micrometeorite/debris environment (flux, average velocity)
+- Thermal cycling extremes (±150°C or more in LEO)
+- Outgassing and material degradation in vacuum
+
+For SUBSEA structures:
+- Hydrostatic pressure at operating depth
+- Current velocity and wave loading
+- Biofouling rates and species
+- Cathodic protection status and corrosion rates
+- Temperature gradients and thermocline effects
+
+For ARCTIC structures:
+- Permafrost thaw rates and ground settlement
+- Ice loading (static and dynamic)
+- Extreme thermal gradients (annual range)
+- Wind chill and abrasion effects
+- Snow loading and avalanche risk
+
+{location_context}
+
+You MUST respond with ONLY valid JSON:
+{{
+  "environment_type": "terrestrial_civil",
+  "location_context": "Warsaw, Poland",
+  "stressors": [
+    {{
+      "name": "Freeze-thaw cycling",
+      "severity": "HIGH",
+      "measured_value": "~80 cycles/year",
+      "description": "Repeated freezing and thawing of absorbed moisture causes internal pressure and progressive cracking in concrete",
+      "source": "Polish Institute of Meteorology"
+    }}
+  ],
+  "accelerating_factors": ["De-icing salt application", "Heavy vehicle traffic"],
+  "mitigating_factors": ["Regular maintenance program", "Protective coating"],
+  "data_sources": ["https://example.com/source"]
+}}
