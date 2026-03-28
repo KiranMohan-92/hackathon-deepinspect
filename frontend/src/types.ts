@@ -107,6 +107,13 @@ export interface AgentState {
 
 export type AnalysisStatus = "idle" | "analyzing" | "complete" | "error";
 
+export interface AnalysisContext {
+  age?: string;
+  location?: string;
+  last_inspection?: string;
+  known_issues?: string;
+}
+
 export interface AnalysisState {
   image: File | null;
   imagePreviewUrl: string | null;

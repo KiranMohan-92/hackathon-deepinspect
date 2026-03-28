@@ -1,9 +1,11 @@
 import { useRef, useState, type DragEvent, type ChangeEvent } from "react";
 import type { UseAnalysisReturn } from "../../hooks/useAnalysisState";
+import type { AnalysisContext } from "../../types";
 
 interface MissionInputProps {
   analysis: UseAnalysisReturn;
-  onAnalyze: () => void;
+  onAnalyze: (image: File, context?: AnalysisContext) => void;
+  onDemo: (scenario: string) => void;
 }
 
 const DEMO_SCENARIOS = [
@@ -12,7 +14,7 @@ const DEMO_SCENARIOS = [
   { id: "subsea", label: "SUBSEA CABLE DAMAGE", icon: "U" },
 ] as const;
 
-export default function MissionInput({ analysis, onAnalyze }: MissionInputProps) {
+export default function MissionInput({ analysis, onAnalyze, onDemo }: MissionInputProps) {
   const { state, setImage, reset } = analysis;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -46,8 +48,14 @@ export default function MissionInput({ analysis, onAnalyze }: MissionInputProps)
   };
 
   const handleAnalyze = () => {
-    if (!hasImage) return;
-    onAnalyze();
+    if (!hasImage || !state.image) return;
+    // Forward context fields (filter empty strings)
+    const ctx: AnalysisContext = {};
+    if (context.age.trim()) ctx.age = context.age.trim();
+    if (context.location.trim()) ctx.location = context.location.trim();
+    if (context.last_inspection.trim()) ctx.last_inspection = context.last_inspection.trim();
+    if (context.known_issues.trim()) ctx.known_issues = context.known_issues.trim();
+    onAnalyze(state.image, Object.keys(ctx).length > 0 ? ctx : undefined);
   };
 
   return (
@@ -195,6 +203,7 @@ export default function MissionInput({ analysis, onAnalyze }: MissionInputProps)
                 border: "1px solid var(--bg-panel-border)",
               }}
               disabled={isAnalyzing}
+              onClick={() => onDemo(s.id)}
             >
               <span
                 className="w-6 h-6 rounded flex items-center justify-center font-mono-display text-xs flex-shrink-0"

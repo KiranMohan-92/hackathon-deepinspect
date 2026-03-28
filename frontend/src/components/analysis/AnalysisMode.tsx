@@ -1,4 +1,5 @@
 import { useAnalysisState } from "../../hooks/useAnalysisState";
+import { useSSE } from "../../hooks/useSSE";
 import MissionInput from "./MissionInput";
 import VisualAnalysis from "./VisualAnalysis";
 import IntelligenceReport from "./IntelligenceReport";
@@ -6,14 +7,7 @@ import IntelligenceReport from "./IntelligenceReport";
 export default function AnalysisMode() {
   const analysis = useAnalysisState();
   const { state } = analysis;
-
-  const handleAnalyze = () => {
-    if (!state.image) return;
-    analysis.startAnalysis();
-
-    // TODO: Phase 6 will wire this to the SSE streaming endpoint
-    // For now, the UI renders with the state management + mock capability
-  };
+  const { analyzeImage, analyzeDemo, cancel } = useSSE(analysis);
 
   return (
     <div className="h-full flex flex-col analysis-bg overflow-hidden">
@@ -24,7 +18,11 @@ export default function AnalysisMode() {
           className="w-[280px] flex-shrink-0 flex flex-col glass-panel overflow-hidden"
           style={{ borderRight: "1px solid var(--bg-panel-border)" }}
         >
-          <MissionInput analysis={analysis} onAnalyze={handleAnalyze} />
+          <MissionInput
+            analysis={analysis}
+            onAnalyze={analyzeImage}
+            onDemo={analyzeDemo}
+          />
         </div>
 
         {/* Panel B: Visual Analysis (flex-1) */}
@@ -59,12 +57,25 @@ export default function AnalysisMode() {
             Google ADK · Gemini Vision · 5 Agents
           </span>
           {state.analysisStatus === "analyzing" && (
-            <span
-              className="font-mono-display text-xs"
-              style={{ color: "var(--accent-scan)" }}
-            >
-              {state.elapsedTime}s
-            </span>
+            <>
+              <button
+                onClick={cancel}
+                className="text-xs px-2 py-0.5 rounded transition-colors"
+                style={{
+                  color: "var(--severity-critical)",
+                  border: "1px solid rgba(255,23,68,0.3)",
+                  background: "rgba(255,23,68,0.08)",
+                }}
+              >
+                CANCEL
+              </button>
+              <span
+                className="font-mono-display text-xs"
+                style={{ color: "var(--accent-scan)" }}
+              >
+                {state.elapsedTime}s
+              </span>
+            </>
           )}
         </div>
       </div>
