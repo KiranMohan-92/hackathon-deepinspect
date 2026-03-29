@@ -46,6 +46,7 @@ class BridgeRiskReport(BaseModel):
     per_heading_assessments: dict[str, VisualAssessment] = {}  # str(heading) → assessment
     context: Optional[BridgeContext] = None
     generated_at: datetime
+    thinking_steps: list[str] = []    # AI chain-of-thought for final risk report generation
 
 
 class BboxRequest(BaseModel):

@@ -9,6 +9,8 @@ const useAppStore = create((set, get) => ({
   selectedBridgeId: null,
   // Bridges currently being deep-analysed { osm_id: true }
   analyzingBridgeIds: {},
+  // Live thinking steps per bridge during analysis { osm_id: [{stage, heading?, steps}] }
+  analysisThinking: {},
   // Bridges checked in the list for batch analysis { osm_id: true }
   checkedBridgeIds: {},
 
@@ -29,6 +31,7 @@ const useAppStore = create((set, get) => ({
       analyzedBridges: {},
       checkedBridgeIds: {},
       analyzingBridgeIds: {},
+      analysisThinking: {},
       scanProgress: [],
     }),
   setLoading: (isLoading) => set({ isLoading }),
@@ -59,11 +62,28 @@ const useAppStore = create((set, get) => ({
 
   setAnalyzedBridge: (osm_id, report) =>
     set((state) => {
-      const next = { ...state.analyzingBridgeIds };
-      delete next[osm_id];
+      const nextAnalyzing = { ...state.analyzingBridgeIds };
+      delete nextAnalyzing[osm_id];
+      const nextThinking = { ...state.analysisThinking };
+      delete nextThinking[osm_id];
       return {
         analyzedBridges: { ...state.analyzedBridges, [osm_id]: report },
-        analyzingBridgeIds: next,
+        analyzingBridgeIds: nextAnalyzing,
+        analysisThinking: nextThinking,
+      };
+    }),
+
+  appendAnalysisThinkingStep: (osm_id, { stage, heading, step }) =>
+    set((state) => {
+      const blocks = state.analysisThinking[osm_id] || [];
+      const last = blocks[blocks.length - 1];
+      const sameBlock =
+        last && last.stage === stage && last.heading === (heading ?? null);
+      const newBlocks = sameBlock
+        ? [...blocks.slice(0, -1), { ...last, steps: [...last.steps, step] }]
+        : [...blocks, { stage, heading: heading ?? null, steps: [step] }];
+      return {
+        analysisThinking: { ...state.analysisThinking, [osm_id]: newBlocks },
       };
     }),
 

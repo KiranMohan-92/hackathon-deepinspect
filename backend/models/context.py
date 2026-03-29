@@ -13,3 +13,4 @@ class BridgeContext(BaseModel):
     structural_significance: str = "minor"   # "critical" | "major" | "minor"
     age_years: Optional[int] = None
     sources: list[str] = []
+    thinking_steps: list[str] = []    # AI chain-of-thought for context research

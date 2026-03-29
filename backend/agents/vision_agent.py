@@ -16,6 +16,7 @@ PerHeadingMap = dict[str, VisualAssessment]
 
 async def analyze_bridge(
     bridge: BridgeTarget,
+    progress_callback=None,
 ) -> tuple[VisualAssessment | None, PerHeadingMap]:
     """
     Analyze each heading image separately so defect bounding boxes are
@@ -47,6 +48,20 @@ async def analyze_bridge(
             data = json.loads(response.text)
             data["images_analyzed"] = 1
             data["street_view_coverage"] = "partial"
+            # Print thinking steps to terminal and emit via callback
+            steps = data.get("thinking_steps", [])
+            if steps:
+                print(f"\n[VisionAgent] 🧠 Thinking — heading {heading} for {bridge.osm_id}:")
+                for i, step in enumerate(steps, 1):
+                    print(f"  [{i}] {step}")
+                if progress_callback:
+                    for step in steps:
+                        await progress_callback({
+                            "type": "thinking_step",
+                            "stage": "vision",
+                            "heading": str(heading),
+                            "step": step,
+                        })
             per_heading[str(heading)] = VisualAssessment(**data)
         except Exception as e:
             print(f"[VisionAgent] Error analysing heading {heading} for {bridge.osm_id}: {e}")

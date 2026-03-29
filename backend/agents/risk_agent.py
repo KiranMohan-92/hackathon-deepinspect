@@ -15,6 +15,7 @@ async def generate_report(
     visual: VisualAssessment | None,
     context: BridgeContext | None,
     per_heading_assessments: dict | None = None,
+    progress_callback=None,
 ) -> BridgeRiskReport:
     ctx = context or BridgeContext()
     base_score = compute_base_risk_score(visual, ctx)
@@ -40,10 +41,25 @@ async def generate_report(
         )
         response = text_model.generate_content(prompt, generation_config=narrative_config)
         narrative = json.loads(response.text)
+        # Print thinking steps to terminal and emit via callback
+        steps = narrative.get("thinking_steps", [])
+        if steps:
+            print(f"\n[RiskAgent] 🧠 Thinking — {bridge.name or bridge.osm_id} (score={round(base_score,1)}, tier={tier}):")
+            for i, step in enumerate(steps, 1):
+                print(f"  [{i}] {step}")
+            if progress_callback:
+                for step in steps:
+                    await progress_callback({
+                        "type": "thinking_step",
+                        "stage": "risk",
+                        "step": step,
+                    })
     except Exception as e:
         print(f"[RiskAgent] Error for bridge {bridge.osm_id}: {e}")
 
     per_heading = per_heading_assessments or {}
+    # Remove thinking_steps from narrative dict before splatting — pass it explicitly
+    report_thinking = narrative.pop("thinking_steps", [])
     try:
         return BridgeRiskReport(
             bridge_id=bridge.osm_id,
@@ -56,6 +72,7 @@ async def generate_report(
             per_heading_assessments=per_heading,
             context=ctx,
             generated_at=datetime.utcnow(),
+            thinking_steps=report_thinking,
             **narrative,
         )
     except Exception as e:

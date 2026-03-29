@@ -73,19 +73,45 @@ async def scan_bridges(request: ScanRequest):
     )
 
 
-@app.post("/api/bridges/{osm_id}/analyze", response_model=BridgeRiskReport)
+@app.post("/api/bridges/{osm_id}/analyze")
 async def analyze_bridge_detail(osm_id: str, summary: BridgeSummary):
     """
-    Deep analysis for a single bridge. Runs Vision + Context + Risk agents.
-    Frontend calls this when the user clicks 'Run Deep Analysis'.
+    Deep analysis for a single bridge. Streams SSE events:
+      {"type": "thinking", "stage": "vision"|"context"|"risk", "steps": [...]}
+      {"type": "complete", "report": {...}}
+      {"type": "error", "message": "..."}
     """
     if summary.osm_id != osm_id:
         raise HTTPException(status_code=400, detail="osm_id in path must match body")
-    try:
-        report = await run_single_analysis(summary)
-        return report
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def on_progress(msg: dict):
+        await queue.put(msg)
+
+    async def run():
+        try:
+            report = await run_single_analysis(summary, progress_callback=on_progress)
+            await queue.put({"type": "complete", "report": json.loads(report.model_dump_json())})
+        except Exception as e:
+            await queue.put({"type": "error", "message": str(e)})
+        finally:
+            await queue.put(None)  # sentinel
+
+    asyncio.create_task(run())
+
+    async def stream():
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/demo", response_model=list[BridgeRiskReport])

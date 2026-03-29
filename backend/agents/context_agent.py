@@ -9,7 +9,7 @@ CONTEXT_PROMPT_TEMPLATE = Path("prompts/context_prompt.txt").read_text()
 CURRENT_YEAR = datetime.now().year
 
 
-async def get_bridge_context(bridge: BridgeTarget) -> BridgeContext:
+async def get_bridge_context(bridge: BridgeTarget, progress_callback=None) -> BridgeContext:
     osm_metadata = {
         "name": bridge.name,
         "construction_year": bridge.construction_year,
@@ -28,6 +28,19 @@ async def get_bridge_context(bridge: BridgeTarget) -> BridgeContext:
     try:
         response = text_model.generate_content(prompt, generation_config=json_config)
         data = json.loads(response.text)
+        # Print thinking steps to terminal and emit via callback
+        steps = data.get("thinking_steps", [])
+        if steps:
+            print(f"\n[ContextAgent] 🧠 Thinking — {bridge.name or bridge.osm_id}:")
+            for i, step in enumerate(steps, 1):
+                print(f"  [{i}] {step}")
+            if progress_callback:
+                for step in steps:
+                    await progress_callback({
+                        "type": "thinking_step",
+                        "stage": "context",
+                        "step": step,
+                    })
         ctx = BridgeContext(**data)
         # Compute age_years from whichever year source is available
         year = ctx.construction_year or bridge.construction_year

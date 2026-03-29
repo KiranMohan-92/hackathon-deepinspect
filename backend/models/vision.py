@@ -29,3 +29,4 @@ class VisualAssessment(BaseModel):
     visible_defects_summary: str
     images_analyzed: int
     street_view_coverage: str         # "full" | "partial" | "none"
+    thinking_steps: list[str] = []    # AI chain-of-thought for this image analysis

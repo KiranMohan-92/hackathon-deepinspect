@@ -6,7 +6,10 @@ Bridge name: {bridge_name}
 Location: {lat}, {lon}, Poland
 OSM metadata: {osm_metadata}
 
+IMPORTANT: Before providing your answer, reason step by step. Populate the "thinking_steps" array with 3-5 steps describing how you identified the bridge, what era clues you used, what you know about its history, and how you determined significance. Be specific to this bridge.
+
 Using your knowledge of Polish infrastructure, construction history, and engineering records, provide:
+- thinking_steps: list of reasoning steps (3-5 strings)
 - construction_year: integer or null (estimate based on era/style if exact year unknown)
 - construction_era: one of "Soviet-era" (1945-1989), "Pre-war" (before 1939), "Post-war modern" (1990+), "Unknown"
 - material: one of "reinforced_concrete", "pre_stressed_concrete", "steel", "masonry", "composite", "wood", "unknown"

@@ -6,8 +6,18 @@ Context Data: {context_json}
 Computed Risk Score: {base_score} out of 5.0
 Risk Tier: {tier}
 
+IMPORTANT: Before writing the report, reason through the evidence step by step. Populate "thinking_steps" with 4-6 steps showing how you weighed the visual findings against context data, age, traffic load, and incident history to arrive at the risk tier and recommended action.
+
 Write a concise professional assessment. Respond with this exact JSON structure:
 {{
+  "thinking_steps": [
+    "Step 1: Review visual assessment scores — identify the highest-severity defects found",
+    "Step 2: Cross-reference construction context — age, era, material type and their structural implications",
+    "Step 3: Consider incident history and traffic load — how do past events affect current risk?",
+    "Step 4: Evaluate computed score {base_score}/5.0 vs qualitative observations — do they align?",
+    "Step 5: Determine recommended action tier based on combined evidence",
+    "Step 6: Note confidence limitations — gaps in data that could affect assessment accuracy"
+  ],
   "condition_summary": "2-3 sentence description of overall observed condition",
   "key_risk_factors": ["factor 1", "factor 2", "factor 3"],
   "recommended_action": "one of: Immediate closure and emergency inspection | Priority inspection within 30 days | Schedule inspection within 6 months | Routine monitoring — next standard cycle",

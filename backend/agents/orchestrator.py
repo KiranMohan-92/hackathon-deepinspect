@@ -7,7 +7,7 @@ from agents.risk_agent import generate_report
 from config import settings
 
 
-async def run_single_analysis(summary: BridgeSummary) -> BridgeRiskReport:
+async def run_single_analysis(summary: BridgeSummary, progress_callback=None) -> BridgeRiskReport:
     """
     On-demand deep analysis for a single bridge.
     Called when user clicks 'Run Deep Analysis' on the frontend.
@@ -17,11 +17,11 @@ async def run_single_analysis(summary: BridgeSummary) -> BridgeRiskReport:
 
     # Vision + Context in parallel
     (visual, per_heading), ctx = await asyncio.gather(
-        analyze_bridge(bridge),
-        get_bridge_context(bridge),
+        analyze_bridge(bridge, progress_callback=progress_callback),
+        get_bridge_context(bridge, progress_callback=progress_callback),
     )
 
-    report = await generate_report(bridge, visual, ctx, per_heading)
+    report = await generate_report(bridge, visual, ctx, per_heading, progress_callback=progress_callback)
     print(f"[Orchestrator] Analysis complete: {bridge.osm_id} → {report.risk_tier} ({report.risk_score})")
     return report
 
