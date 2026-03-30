@@ -1,0 +1,24 @@
+{
+  "name": "@stitch-design/deepinspect_v2",
+  "version": "1.0.0",
+  "description": "AI-powered bridge risk assessment for Poland. Scan any city or map area to discover motor-vehicle bridges ranked by structural priority, then deep-analyse individual bridges with Gemini vision and Street View imagery — no field inspection required.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KiranMohan-92/hackathon-deepinspect.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/KiranMohan-92/hackathon-deepinspect/issues"
+  },
+  "homepage": "https://github.com/KiranMohan-92/hackathon-deepinspect#readme",
+  "dependencies": {
+    "@google/stitch-sdk": "^0.0.3"
+  }
+}
