@@ -1,0 +1,72 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - link "Skip to main content" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - region "Notifications alt+T"
+  - banner [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e10]
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Deep
+          - generic [ref=e15]: Inspect
+        - generic [ref=e16]: INFRASTRUCTURE INTEL
+    - generic "Backend unreachable" [ref=e17]:
+      - img [ref=e18]
+    - generic [ref=e26]:
+      - img [ref=e27]
+      - generic [ref=e30]: 22:10:48 UTC
+    - button "INTEL" [ref=e31] [cursor=pointer]:
+      - img [ref=e32]
+      - text: INTEL
+    - search [ref=e34]:
+      - group "Search mode" [ref=e35]:
+        - button "CITY" [pressed] [ref=e36] [cursor=pointer]:
+          - img [ref=e37]
+          - generic [ref=e40]: CITY
+        - button "BRIDGE" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+          - generic [ref=e45]: BRIDGE
+        - button "COORDS" [ref=e46] [cursor=pointer]:
+          - img [ref=e47]
+          - generic [ref=e49]: COORDS
+      - generic [ref=e50]:
+        - img [ref=e51]
+        - textbox "Search query" [ref=e54]:
+          - /placeholder: Enter city name…
+      - button "Start scan" [disabled] [ref=e55]: SCAN
+      - button "Load demo data" [ref=e56] [cursor=pointer]:
+        - img [ref=e57]
+        - generic [ref=e59]: DEMO
+      - generic "Analyse a bridge photo" [ref=e60] [cursor=pointer]:
+        - img [ref=e61]
+        - generic [ref=e64]: UPLOAD
+  - main [ref=e65]:
+    - generic [ref=e67]:
+      - generic:
+        - generic [ref=e68]:
+          - button "Zoom in" [ref=e69] [cursor=pointer]: +
+          - button "Zoom out" [ref=e70] [cursor=pointer]: −
+        - generic [ref=e71]:
+          - link "Leaflet" [ref=e72] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e73]
+            - text: Leaflet
+          - text: "| ©"
+          - link "CARTO" [ref=e77] [cursor=pointer]:
+            - /url: https://carto.com/
+          - text: ©
+          - link "OSM" [ref=e78] [cursor=pointer]:
+            - /url: https://www.openstreetmap.org/copyright
+      - button "Scan current map area" [ref=e80] [cursor=pointer]:
+        - img [ref=e81]
+        - text: SCAN AREA
+    - generic [ref=e84]:
+      - img [ref=e86]
+      - generic [ref=e88]:
+        - paragraph [ref=e89]: No bridges loaded
+        - paragraph [ref=e90]: Enter a city (e.g. Warsaw) and click Scan, or zoom the map and use "Scan Area".
+      - paragraph [ref=e91]: OR UPLOAD A BRIDGE PHOTO
+```

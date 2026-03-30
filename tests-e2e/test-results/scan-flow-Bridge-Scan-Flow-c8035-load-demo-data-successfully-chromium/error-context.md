@@ -1,0 +1,116 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - link "Skip to main content" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - region "Notifications alt+T"
+  - banner [ref=e5]:
+    - generic [ref=e7]:
+      - img [ref=e10]
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Deep
+          - generic [ref=e15]: Inspect
+        - generic [ref=e16]: INFRASTRUCTURE INTEL
+    - generic "Backend unreachable" [ref=e17]:
+      - img [ref=e18]
+    - generic [ref=e26]:
+      - img [ref=e27]
+      - generic [ref=e30]: 22:11:08 UTC
+    - generic [ref=e32]:
+      - img [ref=e33]
+      - generic [ref=e38]: "3"
+    - button "INTEL" [ref=e39] [cursor=pointer]:
+      - img [ref=e40]
+      - text: INTEL
+    - search [ref=e42]:
+      - group "Search mode" [ref=e43]:
+        - button "CITY" [pressed] [ref=e44] [cursor=pointer]:
+          - img [ref=e45]
+          - generic [ref=e48]: CITY
+        - button "BRIDGE" [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic [ref=e53]: BRIDGE
+        - button "COORDS" [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+          - generic [ref=e57]: COORDS
+      - generic [ref=e58]:
+        - img [ref=e59]
+        - textbox "Search query" [ref=e62]:
+          - /placeholder: Enter city name…
+      - button "Start scan" [disabled] [ref=e63]: SCAN
+      - button "Load demo data" [ref=e64] [cursor=pointer]:
+        - img [ref=e65]
+        - generic [ref=e67]: DEMO
+      - generic "Analyse a bridge photo" [ref=e68] [cursor=pointer]:
+        - img [ref=e69]
+        - generic [ref=e72]: UPLOAD
+  - main [ref=e73]:
+    - generic [ref=e74]:
+      - group "Filter bridges by risk" [ref=e75]:
+        - button "ALL (3)" [pressed] [ref=e76] [cursor=pointer]
+      - generic [ref=e77]:
+        - paragraph [ref=e78]: 3 OF 3 IN VIEW
+        - generic [ref=e82]: 3 PENDING
+      - generic [ref=e83]:
+        - generic:
+          - generic:
+            - button [ref=e84] [cursor=pointer]
+            - button [ref=e86] [cursor=pointer]
+            - button [ref=e88] [cursor=pointer]
+        - generic:
+          - generic [ref=e90]:
+            - button "Zoom in" [ref=e91] [cursor=pointer]: +
+            - button "Zoom out" [ref=e92] [cursor=pointer]: −
+          - generic [ref=e93]:
+            - link "Leaflet" [ref=e94] [cursor=pointer]:
+              - /url: https://leafletjs.com
+              - img [ref=e95]
+              - text: Leaflet
+            - text: "| ©"
+            - link "CARTO" [ref=e99] [cursor=pointer]:
+              - /url: https://carto.com/
+            - text: ©
+            - link "OSM" [ref=e100] [cursor=pointer]:
+              - /url: https://www.openstreetmap.org/copyright
+        - button "Scan current map area" [ref=e102] [cursor=pointer]:
+          - img [ref=e103]
+          - text: SCAN AREA
+    - generic [ref=e106]:
+      - generic [ref=e107]:
+        - generic [ref=e109] [cursor=pointer]:
+          - checkbox "Select all bridges" [ref=e110]
+          - generic [ref=e111]: 3 BRIDGES FOUND
+        - paragraph [ref=e112]: SORTED BY PRIORITY ~ 0 ANALYZED
+        - tablist "Filter by road class" [ref=e113]:
+          - tab "ALL 3" [selected] [ref=e114] [cursor=pointer]
+          - tab "MOTORWAY 1" [ref=e115] [cursor=pointer]
+          - tab "PRIMARY 1" [ref=e116] [cursor=pointer]
+          - tab "SECONDARY 1" [ref=e117] [cursor=pointer]
+      - list [ref=e118]:
+        - listitem [ref=e119]:
+          - checkbox "Select bridge Critical Bridge Gamma" [ref=e120] [cursor=pointer]
+          - button "View details for bridge Critical Bridge Gamma" [ref=e121] [cursor=pointer]:
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - paragraph [ref=e125]: Critical Bridge Gamma
+                - generic [ref=e126]: MOTORWAY
+              - paragraph [ref=e127]: P5 ~ 1975 ~ STEEL
+        - listitem [ref=e128]:
+          - checkbox "Select bridge Test Bridge Alpha" [ref=e129] [cursor=pointer]
+          - button "View details for bridge Test Bridge Alpha" [ref=e130] [cursor=pointer]:
+            - generic [ref=e132]:
+              - generic [ref=e133]:
+                - paragraph [ref=e134]: Test Bridge Alpha
+                - generic [ref=e135]: PRIMARY
+              - paragraph [ref=e136]: P4.5 ~ 1985 ~ CONCRETE
+        - listitem [ref=e137]:
+          - checkbox "Select bridge Test Bridge Beta" [ref=e138] [cursor=pointer]
+          - button "View details for bridge Test Bridge Beta" [ref=e139] [cursor=pointer]:
+            - generic [ref=e141]:
+              - generic [ref=e142]:
+                - paragraph [ref=e143]: Test Bridge Beta
+                - generic [ref=e144]: SECONDARY
+              - paragraph [ref=e145]: P3.2 ~ 1992 ~ STEEL
+```

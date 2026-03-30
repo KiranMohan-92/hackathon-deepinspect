@@ -1,0 +1,76 @@
+# Git
+.git
+.gitignore
+
+# OMC/IDE
+.omc
+.vscode
+.idea
+
+# Dependencies
+node_modules
+**/node_modules
+**/.venv
+**/venv
+
+# Python
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+.Python
+*.so
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.eggs
+*.egg
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# Build outputs
+frontend/dist
+backend/dist
+build
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Test files
+tests/
+test/
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+coverage/
+.nyc_output/
+
+# Data and cache
+backend/data/demo_cache/images
+stitch-output/
+*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
