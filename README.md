@@ -4,6 +4,19 @@ AI-powered bridge risk assessment for Poland. Scan any city or map area to disco
 
 ---
 
+## Production-Grade Features
+
+This version includes enterprise-grade enhancements:
+
+- **Security**: Rate limiting, API key authentication, security headers, error sanitization
+- **TypeScript**: Full frontend migration with strict typing
+- **Testing**: 80+ backend tests, 32 E2E Playwright tests
+- **API v1**: Versioned REST API with backward compatibility
+- **Docker**: Multi-stage builds, hardened compose, CI/CD workflows
+- **Observability**: Structured JSON audit logging, metrics endpoint
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
@@ -11,7 +24,7 @@ AI-powered bridge risk assessment for Poland. Scan any city or map area to disco
 3. [Project Setup](#3-project-setup)
 4. [Run Locally](#4-run-locally)
 5. [Run with Docker](#5-run-with-docker)
-6. [Pre-compute Demo Cache](#6-pre-compute-demo-cache)
+6. [Testing](#6-testing)
 7. [Using the App](#7-using-the-app)
 8. [API Reference](#8-api-reference)
 9. [How It Works](#9-how-it-works)
@@ -74,7 +87,9 @@ REDIS_URL=redis://localhost:6379
 DEMO_MODE=true
 MAX_BRIDGES_PER_SCAN=500
 STREETVIEW_CACHE_DIR=./data/demo_cache/images
-GEMINI_MODEL=gemini-3.1-flash-lite-preview
+GEMINI_MODEL=gemini-2.0-flash
+ENVIRONMENT=development
+API_KEYS=your-secret-api-key-for-production
 ```
 
 ### Frontend environment file
@@ -110,7 +125,7 @@ venv\Scripts\activate           # Windows
 
 pip install -r requirements.txt
 
-uvicorn main:app --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Verify: [http://localhost:8000/health](http://localhost:8000/health) → `{"status":"ok"}`
@@ -147,22 +162,42 @@ Services:
 docker-compose down
 ```
 
----
-
-## 6. Pre-compute Demo Cache
-
-Run this before a live demo to pre-cache Wrocław results so the demo button returns instantly.
+### Production Deployment
 
 ```bash
-cd deepinspect
-
-source backend/venv/bin/activate    # macOS/Linux
-backend\venv\Scripts\activate       # Windows
-
-python scripts/precompute_demo.py
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 ```
 
-Then click **Load Wrocław demo** in the UI, or call `GET /api/demo`.
+---
+
+## 6. Testing
+
+### Backend Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+**80 tests** covering:
+- Unit tests (models, scoring, discovery)
+- API endpoint tests
+- Security tests (rate limiting, API key auth, sanitization)
+
+### E2E Tests
+
+```bash
+cd tests-e2e
+npm install
+npx playwright test
+```
+
+**32 E2E tests** covering:
+- Scan flow
+- Analysis flow
+- Export functionality
+- Image upload
+- Accessibility
 
 ---
 
@@ -222,23 +257,36 @@ Click **CRITICAL / HIGH / MEDIUM / OK / ALL** above the map to show only bridges
 
 Click **Upload bridge image** to analyse your own photo directly — no bridge discovery needed. Gemini returns defect scores for all 6 categories with bounding boxes overlaid on your image.
 
-### Load demo
-
-Click **Load Wrocław demo** to load pre-cached results instantly (requires Step 6 to have been run first).
-
 ---
 
 ## 8. API Reference
 
 Base URL: `http://localhost:8000`
 
-### `GET /health`
+### Health Check
 
-```json
-{"status": "ok", "model": "gemini-3.1-flash-lite-preview"}
+```bash
+GET /health
+GET /api/v1/health
 ```
 
-### `POST /api/scan`
+```json
+{"status": "ok", "version": "1.0.0", "environment": "development", "dependencies": {...}}
+```
+
+### Metrics
+
+```bash
+GET /api/v1/metrics
+```
+
+Returns request counters and audit log count.
+
+### Bridge Discovery
+
+```bash
+POST /api/v1/scan
+```
 
 Fast bridge discovery. Returns all motor-vehicle bridges sorted by priority score. **No Gemini calls** — completes in seconds.
 
@@ -255,7 +303,7 @@ Fast bridge discovery. Returns all motor-vehicle bridges sorted by priority scor
 - `city_scan` — city name
 - `bridge_lookup` — bridge name
 - `coordinate_query` — `"lat, lon"` string
-- `bbox` — viewport bounds (requires `bbox` field, see below)
+- `bbox` — viewport bounds (requires `bbox` field)
 
 For viewport scans, include the `bbox` field:
 ```json
@@ -270,48 +318,43 @@ For viewport scans, include the `bbox` field:
 }
 ```
 
-**Response:** array of `BridgeSummary` objects:
-```json
-[
-  {
-    "osm_id": "123456",
-    "name": "Most Poniatowskiego",
-    "lat": 52.231,
-    "lon": 21.024,
-    "road_class": "primary",
-    "construction_year": 1913,
-    "material": "steel",
-    "priority_score": 4.5
-  }
-]
-```
+### Bridge Analysis
 
-### `POST /api/bridges/{osm_id}/analyze`
+```bash
+POST /api/v1/bridges/{osm_id}/analyze
+```
 
 Deep analysis for a single bridge. Runs Vision + Context + Risk agents (~15–30 seconds).
 
-**Request body:** the `BridgeSummary` object for that bridge (as returned by `/api/scan`).
+### Demo Data
 
-**Response:** `BridgeRiskReport` with full risk assessment, visual defect scores, and engineering narrative.
+```bash
+GET /api/v1/demo
+```
 
-### `GET /api/demo`
+Returns pre-cached Wrocław scan results.
 
-Returns pre-cached Wrocław scan results. Requires `precompute_demo.py` first.
+### Image Analysis
 
-### `POST /api/analyze-image`
+```bash
+POST /api/v1/analyze-image
+```
 
 Analyse an uploaded image file.
 
 ```bash
-curl -X POST http://localhost:8000/api/analyze-image \
+curl -X POST http://localhost:8000/api/v1/analyze-image \
+  -H "X-API-Key: your-secret-api-key" \
   -F "file=@/path/to/bridge.jpg"
 ```
 
-Returns a `VisualAssessment` with scores for 6 defect categories and bounding box coordinates for each defect region.
+### Street View Images
 
-### `GET /api/images/{osm_id}/{heading}`
+```bash
+GET /api/v1/images/{osm_id}/{heading}
+```
 
-Serve a cached Street View image for a bridge. `heading` is `0` (N), `90` (E), or `270` (W).
+Serve a cached Street View image for a bridge. `heading` is `0` (N), `60`, `120`, `180`, `240`, or `300`.
 
 ---
 
@@ -360,17 +403,6 @@ Score range: **1.0 (best) → 5.0 (worst)**
 | MEDIUM | 2.0–2.9 | Amber | Schedule inspection within 6 months |
 | OK | 1.0–1.9 | Green | Routine monitoring — next standard cycle |
 
-### Geocoding
-
-City names are resolved using **OSM Nominatim** (free, no API key). Google Geocoding API is used as an optional fallback if a Nominatim key is configured.
-
-### Overpass API fallback
-
-Bridge discovery uses three Overpass API mirrors tried in order:
-1. `overpass-api.de`
-2. `overpass.kumi.systems`
-3. `overpass.openstreetmap.ru`
-
 ---
 
 ## 10. Project Structure
@@ -378,61 +410,83 @@ Bridge discovery uses three Overpass API mirrors tried in order:
 ```
 deepinspect/
 ├── backend/
-│   ├── main.py                  # FastAPI — /api/scan, /api/bridges/{id}/analyze, /api/analyze-image
-│   ├── config.py                # Settings from .env
+│   ├── main.py                    # FastAPI entry point
+│   ├── config.py                  # Settings from .env
+│   ├── api/
+│   │   └── v1/
+│   │       └── router.py          # API v1 endpoints
 │   ├── agents/
-│   │   ├── orchestrator.py      # run_single_analysis() + run_pipeline() for demo
-│   │   ├── discovery_agent.py   # Overpass query → priority-scored BridgeSummary list
-│   │   ├── vision_agent.py      # Street View fetch + Gemini vision
-│   │   ├── context_agent.py     # Gemini text → construction history
-│   │   └── risk_agent.py        # Score fusion + Gemini narrative report
+│   │   ├── orchestrator.py        # run_single_analysis() + run_pipeline()
+│   │   ├── discovery_agent.py     # Overpass query → priority-scored bridges
+│   │   ├── vision_agent.py        # Street View fetch + Gemini vision
+│   │   ├── context_agent.py       # Gemini text → construction history
+│   │   └── risk_agent.py          # Score fusion + narrative report
 │   ├── models/
-│   │   ├── bridge.py            # BridgeSummary, BridgeTarget, BridgeRiskReport, ScanRequest
-│   │   ├── vision.py            # VisualAssessment, DefectScore, DefectRegion
-│   │   └── context.py           # BridgeContext
+│   │   └── bridge.py              # Pydantic models
 │   ├── services/
-│   │   ├── gemini_service.py    # Gemini model instances + generation configs
-│   │   ├── overpass_service.py  # OSM Overpass query (motor-vehicle bridges only)
-│   │   ├── maps_service.py      # Nominatim geocoding (Google as fallback)
-│   │   └── streetview_service.py# Street View fetch + disk cache
+│   │   ├── gemini_service.py      # Gemini model instances
+│   │   ├── overpass_service.py    # OSM Overpass query
+│   │   ├── maps_service.py        # Nominatim geocoding
+│   │   └── streetview_service.py  # Street View fetch + cache
 │   ├── utils/
-│   │   ├── scoring.py           # Risk score formula + tier mapping
-│   │   └── cache.py             # Redis with in-memory fallback
+│   │   ├── scoring.py             # Risk score formula
+│   │   ├── errors.py              # Custom error classes
+│   │   ├── security.py            # Security middleware
+│   │   └── audit.py               # Audit logging
 │   ├── prompts/
-│   │   ├── vision_prompt.txt    # Structural defect scoring prompt
-│   │   ├── context_prompt.txt   # Bridge history research prompt
-│   │   └── risk_report_prompt.txt # Narrative report generation prompt
-│   ├── data/demo_cache/         # Pre-computed results + cached Street View images
+│   │   ├── vision_prompt.txt
+│   │   ├── context_prompt.txt
+│   │   └── risk_report_prompt.txt
+│   ├── tests/                     # 80+ pytest tests
+│   │   ├── unit/
+│   │   └── api/
+│   ├── data/demo_cache/           # Pre-computed results
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx              # Root layout + header risk summary
+│   │   ├── App.tsx                # Root component (TypeScript)
+│   │   ├── types.ts              # TypeScript interfaces
 │   │   ├── components/
-│   │   │   ├── MapView.jsx      # Leaflet map + gray/coloured markers + scan button
-│   │   │   ├── SearchBar.jsx    # Query input + demo/upload buttons
-│   │   │   ├── BridgePanel.jsx  # Pre-analysis view + post-analysis report
-│   │   │   ├── BridgeList.jsx   # Priority-sorted bridge list with road class badges
-│   │   │   ├── BridgeImageViewer.jsx # Street View images with defect overlays
-│   │   │   ├── ImageAnalysisModal.jsx # Uploaded photo analysis overlay
-│   │   │   ├── RiskBadge.jsx    # Colour-coded tier badge
-│   │   │   └── ReportExport.jsx # jsPDF report download
+│   │   │   ├── MapView.tsx       # Leaflet map
+│   │   │   ├── SearchBar.tsx      # Query input
+│   │   │   ├── BridgePanel.tsx    # Detail panel
+│   │   │   ├── BridgeList.tsx     # Bridge list
+│   │   │   ├── BridgeImageViewer.tsx
+│   │   │   ├── ImageAnalysisModal.tsx
+│   │   │   ├── RiskBadge.tsx
+│   │   │   ├── ReportExport.tsx   # PDF/CSV/JSON export
+│   │   │   ├── StatsPanel.tsx
+│   │   │   ├── CommandHeader.tsx
+│   │   │   ├── ErrorBoundary.tsx # React error boundary
+│   │   │   └── charts/
 │   │   ├── store/
-│   │   │   └── useAppStore.js   # Zustand state: bridges, analyzedBridges, selectedBridgeId
+│   │   │   └── useAppStore.ts    # Zustand state (TypeScript)
 │   │   ├── hooks/
-│   │   │   ├── useBridgeScan.js # /api/scan calls (discovery)
-│   │   │   └── useBridgeAnalyze.js # /api/bridges/{id}/analyze calls
-│   │   └── utils/riskColors.js  # Tier → colour mapping
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js
+│   │   │   ├── useBridgeScan.ts
+│   │   │   ├── useBridgeAnalyze.ts
+│   │   │   ├── useHealthCheck.ts
+│   │   │   └── ...
+│   │   └── utils/
+│   ├── tsconfig.json              # TypeScript config
+│   ├── vite.config.ts             # Vite bundler
 │   ├── tailwind.config.js
-│   ├── .env.example
+│   ├── package.json
 │   └── Dockerfile
+├── tests-e2e/                     # 32 Playwright E2E tests
+│   ├── playwright.config.ts
+│   └── tests/e2e/
 ├── scripts/
-│   └── precompute_demo.py       # Pre-cache Wrocław scan results
+│   └── precompute_demo.py
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                # CI pipeline
+│       └── deploy.yml             # CD pipeline
 ├── docker-compose.yml
+├── docker-compose.override.yml    # Development overrides
+├── docker-compose.prod.yml        # Production config
+├── .dockerignore
 └── README.md
 ```
 
@@ -449,23 +503,18 @@ deepinspect/
 **"Scan this area" returns nothing**
 → Zoom in more — a viewport covering an entire country will return too many results and may time out. Zoom to city level (zoom 12–14) before scanning.
 
-**`REQUEST_DENIED` from Google geocoding**
-→ The Geocoding API is not enabled or the key is restricted. This only affects city-name scans (fallback to Nominatim usually handles it). Check your Google Cloud console.
+**Rate limited (429)**
+→ The API has rate limiting enabled. Add `X-API-Key` header with your production key, or adjust limits in `config.py`.
 
 **Street View images don't appear after analysis**
 → Street View coverage is sparse in rural areas. The vision agent returns `None` and the risk score falls back to a 3.0 visual component. The confidence caveat in the report will note the limitation.
 
-**`GEMINI_API_KEY not found` on startup**
-→ Make sure `backend/.env` exists (not just `.env.example`) and contains `GEMINI_API_KEY=...`.
-
 **Frontend map is blank**
 → The map uses OpenStreetMap via Leaflet — no API key needed. If it's blank, check browser console for network errors (tile requests to `tile.openstreetmap.org` are blocked). Restart `npm run dev` after any `.env` change.
-
-**Redis connection error in logs**
-→ Non-fatal. The backend automatically falls back to in-memory caching. Redis is optional.
 
 **Demo cache not found (`/api/demo` returns 404)**
 → Run `python scripts/precompute_demo.py` from the `deepinspect/` root with the backend venv active.
 
-**`single '{' encountered in format string` error in risk agent**
-→ This was a bug in an older version where the prompt template had unescaped braces. Make sure `backend/prompts/risk_report_prompt.txt` uses `{{` and `}}` around the JSON example block (not single braces).
+**Tests failing**
+→ Run backend tests: `cd backend && python -m pytest tests/ -v`
+→ Run E2E tests: `cd tests-e2e && npx playwright test`
