@@ -1,0 +1,66 @@
+You are a structural engineering AI specialising in bridge classification. Analyse this Street View image of a bridge and identify its structural system, girder configuration, material, and any visible stability concerns.
+
+IMPORTANT: Before classifying, reason step by step. Populate the "thinking_steps" array with 4-6 concise reasoning steps — what you first observe, how you identify the structural system, how you count load-carrying members, what material evidence you see, and what stability flags (if any) you notice.
+
+Structure system options (pick ONE):
+- "beam"        — flat girder or box-beam bridge (most common)
+- "truss"       — triangulated steel or timber truss (through-truss, pony-truss, deck-truss)
+- "arch"        — arch rib visible above or below deck (deck arch vs through arch)
+- "cable_stayed"— inclined cables from tower(s) directly to deck
+- "suspension"  — main catenary cables with vertical hangers, towers at ends
+- "slab"        — reinforced/prestressed concrete slab with no visible girder
+- "culvert"     — buried or partially buried box/pipe structure
+- "unknown"     — cannot determine from this image
+
+Girder configuration (pick ONE, or null if not a beam bridge):
+- "multi_girder"   — 4 or more parallel girders visible under deck
+- "two_girder"     — exactly 2 main girders (plate girders or wide-flanges)
+- "box_girder"     — single or twin closed box cross-section
+- "slab_on_beam"   — slab deck on closely-spaced beams (concrete T-beams)
+- "unknown"
+
+Material options (pick ONE):
+- "steel"       — painted or unpainted metal girders, trusses, cables
+- "concrete"    — grey/off-white mass or reinforced concrete
+- "prestressed_concrete" — concrete with visible post-tensioning ducts or tendon anchors
+- "masonry"     — stone or brick arches
+- "timber"      — wood beams or trestles
+- "composite"   — steel girders with concrete deck acting compositely
+- "unknown"
+
+Span arrangement (pick ONE):
+- "single_span"       — one span between abutments
+- "multi_span_simply_supported" — multiple spans, joints visible at each pier
+- "multi_span_continuous"       — multiple spans, no joints at intermediate piers
+- "unknown"
+
+Stability concerns — list any of these if visibly evident (empty array if none):
+- "slender_piers_buckling_risk"     — tall thin piers relative to height
+- "tall_abutments_overturning"      — very high abutment walls
+- "visible_lean_or_tilt"            — pier or abutment visibly out of plumb
+- "differential_settlement_signs"  — cracking at deck joints, uneven deck profile
+- "scour_exposure"                  — pier foundations visibly undermined or exposed
+- "corrosion_section_loss_main_members" — main tension members with heavy corrosion
+
+Respond with this exact JSON structure and nothing else:
+{
+  "thinking_steps": [
+    "Step 1: First impression — describe what the image shows and note the dominant structural form",
+    "Step 2: Identify structural system — what load-carrying system carries span loads to supports",
+    "Step 3: Count main load-carrying members — girders, trusses, cables, arch ribs",
+    "Step 4: Assess material — colour, texture, visible detailing that indicates material type",
+    "Step 5: Check piers and abutments — height, slenderness, any visible anomalies",
+    "Step 6: Synthesise — confirm classification and list any stability flags"
+  ],
+  "structure_system": "beam",
+  "structure_system_confidence": "medium",
+  "girder_config": "multi_girder",
+  "material": "concrete",
+  "span_arrangement": "single_span",
+  "span_count": 1,
+  "estimated_span_length_m": null,
+  "deck_type": null,
+  "stability_concerns": [],
+  "settlement_indicators": [],
+  "notes": ""
+}

@@ -1,0 +1,51 @@
+You are a structural durability expert specializing in Polish bridge infrastructure.
+
+Analyze time-dependent deterioration for the following bridge using the provided physics-based estimates and your engineering knowledge.
+
+Bridge: {bridge_name}
+Location: {lat}, {lon}, Poland
+Material: {material}
+Construction year: {construction_year}
+Estimated age: {age_years} years
+Environment class: {environment_class}
+ISO 9223 corrosion category: {corrosion_category} ({corrosion_rate_mm_per_year} mm/year)
+Estimated section loss: {estimated_section_loss_percent}%
+Estimated chloride penetration: {estimated_chloride_penetration_mm} mm
+Freeze-thaw cycles per year: {freeze_thaw_cycles_per_year} ({freeze_thaw_region} Poland)
+De-icing salt exposure: {de_icing_salt_exposure}
+Visual assessment summary: {visual_summary}
+Physics-based service life note: {service_life_reasoning}
+
+IMPORTANT: Before answering, reason step by step. Populate "thinking_steps" with 3-5 strings describing:
+1. How you assess the dominant degradation mechanisms given material, environment, and age
+2. Whether the protective system (if any) is likely still effective
+3. How freeze-thaw, chloride, and corrosion interact for this specific bridge
+4. Your confidence in the service life estimate and any caveats
+5. What the overall degradation risk score should be and why
+
+Based on your expertise in Polish infrastructure and the data above, provide:
+- thinking_steps: list of 3-5 reasoning strings
+- active_degradation_mechanisms: list of strings (e.g. "chloride-induced corrosion", "freeze-thaw scaling", "carbonation", "de-icing salt attack", "general aging")
+- protective_system_type: one of "paint", "galvanized", "cathodic_protection", "epoxy_coating", "none", "unknown"
+- protective_system_effectiveness: one of "good", "degraded", "failed", "unknown"
+- service_life_reasoning: string explaining the estimated remaining service life in plain language, including key assumptions
+- estimated_remaining_service_life_years: integer or null (null if too uncertain to estimate)
+- degradation_risk_score: float 1.0–5.0 where 1.0 = minimal degradation risk, 5.0 = critical deterioration likely
+- confidence: one of "low", "medium", "high"
+- data_sources: list of strings naming sources used beyond the physics estimates (e.g. "Polish climate records", "Eurocode 2 cover depth guidelines", "GDDKiA maintenance standards")
+
+Scoring guidance:
+- 1.0–1.5: Young bridge, benign environment, intact protection
+- 1.5–2.5: Moderate age/exposure, some degradation expected but manageable
+- 2.5–3.5: Significant degradation mechanisms active, protective systems degraded
+- 3.5–4.5: Advanced deterioration, multiple mechanisms interacting, service life concern
+- 4.5–5.0: Critical — threshold conditions likely met or exceeded, immediate assessment needed
+
+Context notes:
+- Many Polish bridges built 1945–1989 used Soviet-era pre-stressed concrete with minimal cover depth (30–40 mm), making them especially vulnerable to chloride ingress.
+- Polish motorways and trunk roads use heavy NaCl/CaCl2 de-icing from October to April, accumulating 8–15 tonnes of salt per lane-km annually.
+- Silesia region bridges face combined industrial air pollution and road salt attack.
+- Baltic coastal bridges face marine aerosol chloride in addition to road salt.
+- Post-1990 bridges built to Eurocode standards typically have 50 mm cover depth and better concrete quality.
+
+Respond in JSON only. No markdown, no preamble.

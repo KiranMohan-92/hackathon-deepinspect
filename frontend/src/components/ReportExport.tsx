@@ -1,11 +1,17 @@
-import React, { useState } from "react";
-import { Download, Loader2, CheckCircle, FileText, FileJson } from "lucide-react";
+import { useState } from "react";
+import { Download, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 
-let _fontCache: any = null;
+// ─── Unicode font loader ───────────────────────────────────────────────────────
+// jsPDF's built-in Helvetica only covers Latin-1 and garbles Polish/accented
+// characters (ą ę ó ś ń ż ź ć ł etc.) as well as Unicode symbols like ▶.
+// We embed Roboto (full Latin Extended-A/B) fetched from jsDelivr CDN and
+// cached at module level so it is only downloaded once per browser session.
 
-function bufToBase64(buf: ArrayBuffer) {
+let _fontCache = null; // false = fetch failed, object = loaded
+
+function bufToBase64(buf) {
   const bytes = new Uint8Array(buf);
   let binary = "";
   for (let i = 0; i < bytes.length; i += 8192) {
@@ -14,9 +20,9 @@ function bufToBase64(buf: ArrayBuffer) {
   return btoa(binary);
 }
 
-async function fetchFont(url: string) {
+async function fetchFont(url) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), 8000); // 8 s timeout
   try {
     const r = await fetch(url, { signal: controller.signal });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -28,7 +34,8 @@ async function fetchFont(url: string) {
 
 const ROBOTO = "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/roboto/static";
 
-async function ensureFonts(doc: jsPDF) {
+async function ensureFonts(doc) {
+  // Load fonts only once per session
   if (_fontCache === null) {
     try {
       const [normalBuf, boldBuf, italicBuf] = await Promise.all([
@@ -41,14 +48,15 @@ async function ensureFonts(doc: jsPDF) {
         bold:   bufToBase64(boldBuf),
         italic: bufToBase64(italicBuf),
       };
-    } catch (e: any) {
+    } catch (e) {
       console.warn("DeepInspect: could not load Unicode font, falling back to helvetica.", e.message);
       _fontCache = false;
     }
   }
 
-  if (!_fontCache) return "helvetica";
+  if (!_fontCache) return "helvetica"; // offline / timeout fallback
 
+  // Embed fonts into this document instance (safe to call multiple times)
   try {
     doc.addFileToVFS("Roboto-Regular.ttf", _fontCache.normal);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
@@ -57,15 +65,17 @@ async function ensureFonts(doc: jsPDF) {
     doc.addFileToVFS("Roboto-Italic.ttf", _fontCache.italic);
     doc.addFont("Roboto-Italic.ttf", "Roboto", "italic");
     return "Roboto";
-  } catch (e: any) {
+  } catch (e) {
     console.warn("DeepInspect: font embedding failed, falling back to helvetica.", e.message);
     return "helvetica";
   }
 }
 
+// ─── Image + defect-overlay fetcher ──────────────────────────────────────────
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const DEFECT_COLORS_HEX: Record<string, string> = {
+const DEFECT_COLORS_HEX = {
   cracking:               "#EF4444",
   spalling:               "#F97316",
   corrosion:              "#92400E",
@@ -84,7 +94,7 @@ const HEADINGS = [
   { value: 300, label: "North-West" },
 ];
 
-function hexToRgb(hex: string) {
+function hexToRgb(hex) {
   return [
     parseInt(hex.slice(1, 3), 16),
     parseInt(hex.slice(3, 5), 16),
@@ -92,7 +102,7 @@ function hexToRgb(hex: string) {
   ];
 }
 
-function tint(hex: string, opacity = 0.12) {
+function tint(hex, opacity = 0.12) {
   const [r, g, b] = hexToRgb(hex);
   return [
     Math.round(r * opacity + 255 * (1 - opacity)),
@@ -101,7 +111,7 @@ function tint(hex: string, opacity = 0.12) {
   ];
 }
 
-async function fetchImageWithOverlay(url: string, va: any): Promise<{ dataUrl: string; aspectRatio: number } | null> {
+async function fetchImageWithOverlay(url, va) {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -112,7 +122,6 @@ async function fetchImageWithOverlay(url: string, va: any): Promise<{ dataUrl: s
       canvas.width  = w;
       canvas.height = h;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(null);
       ctx.drawImage(img, 0, 0);
 
       if (va) {
@@ -121,7 +130,7 @@ async function fetchImageWithOverlay(url: string, va: any): Promise<{ dataUrl: s
           if (!defect || defect.score < 2 || !defect.regions?.length) return;
           const [r, g, b] = hexToRgb(DEFECT_COLORS_HEX[key]);
 
-          defect.regions.forEach((region: any) => {
+          defect.regions.forEach((region) => {
             const x  = region.x1 * w;
             const y  = region.y1 * h;
             const bw = (region.x2 - region.x1) * w;
@@ -153,12 +162,40 @@ async function fetchImageWithOverlay(url: string, va: any): Promise<{ dataUrl: s
   });
 }
 
+// ─── PDF layout constants ─────────────────────────────────────────────────────
+
 const PAGE_H    = 297;
 const PAGE_W    = 210;
 const MARGIN    = 14;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-function ensureSpace(doc: jsPDF, y: number, needed: number) {
+// ─── Score / tier helpers ─────────────────────────────────────────────────────
+
+function scoreHex(score) {
+  if (score >= 4.0) return "#DC2626"; // CRITICAL
+  if (score >= 3.0) return "#EA580C"; // HIGH
+  if (score >= 2.0) return "#CA8A04"; // MEDIUM
+  return "#16A34A";                   // OK
+}
+
+function tierHex(tier) {
+  return { CRITICAL: "#DC2626", HIGH: "#EA580C", MEDIUM: "#CA8A04", OK: "#16A34A" }[tier] || "#6B7280";
+}
+
+function confidenceHex(conf) {
+  return { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" }[conf?.toLowerCase()] || "#9CA3AF";
+}
+
+function tierLabel(score) {
+  if (score >= 4.0) return "CRITICAL";
+  if (score >= 3.0) return "HIGH";
+  if (score >= 2.0) return "MEDIUM";
+  return "OK";
+}
+
+// ─── PDF layout helpers ───────────────────────────────────────────────────────
+
+function ensureSpace(doc, y, needed) {
   if (y + needed > PAGE_H - 20) {
     doc.addPage();
     return 18;
@@ -166,160 +203,829 @@ function ensureSpace(doc: jsPDF, y: number, needed: number) {
   return y;
 }
 
-function hRule(doc: jsPDF, y: number) {
+function hRule(doc, y) {
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.2);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
   return y + 5;
 }
 
-function sectionTitle(doc: jsPDF, text: string, y: number, F: string) {
+function sectionTitle(doc, text, y, F) {
   y = ensureSpace(doc, y, 12);
   doc.setFillColor(243, 244, 246);
   doc.rect(MARGIN, y - 3, CONTENT_W, 8, "F");
   doc.setFont(F, "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(10.5);
   doc.setTextColor(107, 114, 128);
   doc.text(text.toUpperCase(), MARGIN + 2, y + 2);
   return y + 10;
 }
 
-async function buildPdf(bridge: any) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+// Draw a horizontal score bar (score 0–5 scale)
+function drawScoreBar(doc, x, y, score, maxW) {
+  const barH  = 3;
+  const fillW = Math.max(0, Math.min(score / 5, 1)) * maxW;
+  const [r, g, b] = hexToRgb(scoreHex(score));
+  doc.setFillColor(230, 230, 230);
+  doc.rect(x, y, maxW, barH, "F");
+  doc.setFillColor(r, g, b);
+  doc.rect(x, y, fillW, barH, "F");
+}
 
-  const F = await ensureFonts(doc);
+// Small inline chip (text only, coloured background)
+function drawChip(doc, text, x, y, hexColor, F) {
+  const [r, g, b] = hexToRgb(hexColor);
+  doc.setFont(F, "bold");
+  doc.setFontSize(10.5);
+  const tw = doc.getTextWidth(text);
+  const pw = tw + 5;
+  const ph = 5;
+  doc.setFillColor(r, g, b);
+  doc.roundedRect(x, y - 3.5, pw, ph, 0.8, 0.8, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.text(text, x + 2.5, y + 0.2);
+  return pw;
+}
 
-  const riskHex = (
-    ({ CRITICAL: "#DC2626", HIGH: "#EA580C", MEDIUM: "#CA8A04", OK: "#16A34A" } as Record<string, string>)[bridge.risk_tier]
-    || "#6B7280"
-  );
-  const [rr, rg, rb] = hexToRgb(riskHex);
+// Generate a short report ID from bridge_id + timestamp
+function reportId(bridge) {
+  const ts  = bridge.generated_at ? new Date(bridge.generated_at).getTime() : Date.now();
+  const hash = (ts ^ (ts >>> 16)) & 0xFFFFFF;
+  const id   = (bridge.bridge_id || "").replace(/\D/g, "").slice(0, 6);
+  return `DI-${id || "XXXX"}-${hash.toString(16).toUpperCase().padStart(6, "0")}`;
+}
 
+// ─── Page footer ──────────────────────────────────────────────────────────────
+
+function drawFooter(doc, F, pageNum, totalPages, rid) {
+  doc.setPage(pageNum);
   doc.setFillColor(17, 24, 39);
-  doc.rect(0, 0, PAGE_W, 42, "F");
-
-  doc.setFont(F, "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text("DeepInspect", MARGIN, 11);
+  doc.rect(0, PAGE_H - 10, PAGE_W, 10, "F");
+  doc.setDrawColor(55, 65, 81);
+  doc.setLineWidth(0.3);
+  doc.line(0, PAGE_H - 10, PAGE_W, PAGE_H - 10);
 
   doc.setFont(F, "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(11);
   doc.setTextColor(156, 163, 175);
-  doc.text("AI Bridge Risk Assessment", MARGIN, 16.5);
+  doc.text("DEEPINSPECT  \u00B7  Physics-First Infrastructure Intelligence", MARGIN, PAGE_H - 4);
 
-  const bridgeName = bridge.bridge_name || bridge.bridge_id;
-  doc.setFont(F, "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(255, 255, 255);
-  const nameLines = doc.splitTextToSize(bridgeName, 128);
-  doc.text(nameLines, MARGIN, 27);
+  doc.setTextColor(107, 114, 128);
+  doc.text("ASSESSMENT REPORT \u2014 FOR ENGINEERING REVIEW ONLY", PAGE_W / 2, PAGE_H - 4, { align: "center" });
 
-  const badgeX = PAGE_W - MARGIN - 36;
+  doc.setTextColor(156, 163, 175);
+  doc.text(`${rid}  \u00B7  Page ${pageNum} of ${totalPages}`, PAGE_W - MARGIN, PAGE_H - 4, { align: "right" });
+}
+
+// ─── PAGE 1: Cover + Executive Summary ───────────────────────────────────────
+
+function buildCoverPage(doc, bridge, cert, F, rid) {
+  const tier      = cert?.overall_risk_tier || bridge.risk_tier || "UNKNOWN";
+  const score     = cert?.overall_risk_score ?? bridge.risk_score ?? 0;
+  const conf      = cert?.overall_confidence || bridge.overall_confidence || "";
+  const riskColor = tierHex(tier);
+  const [rr, rg, rb] = hexToRgb(riskColor);
+
+  // ── Dark header band ──────────────────────────────────────────────────────
+  doc.setFillColor(17, 24, 39);
+  doc.rect(0, 0, PAGE_W, 52, "F");
+
+  // Left accent stripe
   doc.setFillColor(rr, rg, rb);
-  doc.roundedRect(badgeX, 8, 36, 26, 2, 2, "F");
-  doc.setFont(F, "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text(bridge.risk_tier, badgeX + 18, 19, { align: "center" });
-  doc.setFontSize(13);
-  doc.text(`${bridge.risk_score.toFixed(1)}/5`, badgeX + 18, 28, { align: "center" });
+  doc.rect(0, 0, 3.5, 52, "F");
 
-  let y = 50;
+  // Logo + subtitle
+  doc.setFont(F, "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  doc.text("DEEPINSPECT", MARGIN + 4, 13);
 
   doc.setFont(F, "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(10.5);
+  doc.setTextColor(156, 163, 175);
+  doc.text("PHYSICS HEALTH CERTIFICATE", MARGIN + 4, 19);
+
+  // Thin separator
+  doc.setDrawColor(55, 65, 81);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN + 4, 22, PAGE_W - MARGIN - 42, 22);
+
+  // Bridge name
+  const bridgeName = bridge.bridge_name || bridge.bridge_id || "Unknown Bridge";
+  doc.setFont(F, "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  const nameLines = doc.splitTextToSize(bridgeName, 130);
+  doc.text(nameLines, MARGIN + 4, 30);
+
+  // Report ID metadata
+  doc.setFont(F, "normal");
+  doc.setFontSize(11);
   doc.setTextColor(107, 114, 128);
-  doc.text(`${bridge.lat?.toFixed(5) || 0}, ${bridge.lon?.toFixed(5) || 0}`, MARGIN, y);
-  doc.text(new Date(bridge.generated_at || Date.now()).toLocaleString(), PAGE_W - MARGIN, y, { align: "right" });
-  y += 4;
+  doc.text(`Report ID: ${rid}`, MARGIN + 4, 46);
+
+  // ── Risk badge (right side of header) ────────────────────────────────────
+  const badgeX = PAGE_W - MARGIN - 38;
+  doc.setFillColor(rr, rg, rb);
+  doc.roundedRect(badgeX, 6, 38, 40, 2, 2, "F");
+
+  // Tier label
+  doc.setFont(F, "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text(tier, badgeX + 19, 18, { align: "center" });
+
+  // Score
+  doc.setFontSize(20);
+  doc.text(`${score.toFixed(1)}`, badgeX + 19, 31, { align: "center" });
+
+  // /5.0 subscript
+  doc.setFont(F, "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("/ 5.0 scale", badgeX + 19, 36, { align: "center" });
+
+  // Confidence
+  if (conf) {
+    const [cr, cg, cb] = hexToRgb(confidenceHex(conf));
+    doc.setFillColor(cr, cg, cb);
+    doc.setFontSize(11);
+    doc.setFont(F, "bold");
+    const cw = doc.getTextWidth(conf.toUpperCase()) + 6;
+    doc.roundedRect(badgeX + 19 - cw / 2, 39, cw, 5, 0.8, 0.8, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.text(conf.toUpperCase(), badgeX + 19, 43, { align: "center" });
+  }
+
+  let y = 60;
+
+  // ── Bridge Identification ─────────────────────────────────────────────────
+  y = sectionTitle(doc, "Bridge Identification", y, F);
+
+  const idMeta = [];
+  if (bridge.bridge_name)                               idMeta.push(["Structure Name", bridge.bridge_name]);
+  if (bridge.bridge_id)                                 idMeta.push(["OSM / Bridge ID",  bridge.bridge_id]);
+  if (bridge.lat != null && bridge.lon != null)         idMeta.push(["Coordinates",      `${bridge.lat.toFixed(6)}, ${bridge.lon.toFixed(6)}`]);
+  if (bridge.context?.construction_year)                idMeta.push(["Year Built",       String(bridge.context.construction_year)]);
+  if (bridge.context?.material && bridge.context.material !== "unknown")
+                                                        idMeta.push(["Material",         bridge.context.material.replace(/_/g, " ")]);
+  if (bridge.context?.age_years)                        idMeta.push(["Structure Age",    `${bridge.context.age_years} years`]);
+
+  const cols  = 3;
+  const colW  = CONTENT_W / cols;
+  idMeta.forEach(([label, value], i) => {
+    const cx = MARGIN + (i % cols) * colW;
+    const cy = y + Math.floor(i / cols) * 13;
+    doc.setFont(F, "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(156, 163, 175);
+    doc.text(label.toUpperCase(), cx, cy);
+    doc.setFont(F, "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(31, 41, 55);
+    const valStr = String(value).charAt(0).toUpperCase() + String(value).slice(1);
+    doc.text(valStr, cx, cy + 5.5);
+  });
+  y += Math.ceil(idMeta.length / cols) * 13 + 2;
   y = hRule(doc, y);
 
-  if (bridge.context) {
-    y = sectionTitle(doc, "Bridge Context", y, F);
-    const ctx = bridge.context;
-    const meta: [string, string][] = [];
-    if (ctx.construction_year)                                      meta.push(["Built",        String(ctx.construction_year)]);
-    if (ctx.material && ctx.material !== "unknown")                 meta.push(["Material",     ctx.material.replace(/_/g, " ")]);
-    if (ctx.construction_era && ctx.construction_era !== "Unknown") meta.push(["Era",          ctx.construction_era]);
-    if (ctx.age_years)                                              meta.push(["Age",          `${ctx.age_years} years`]);
-    if (ctx.structural_significance)                                meta.push(["Significance", ctx.structural_significance]);
+  // ── Report Metadata row ───────────────────────────────────────────────────
+  y = sectionTitle(doc, "Report Metadata", y, F);
+  const metaItems = [];
+  if (bridge.generated_at || cert?.generated_at)
+    metaItems.push(["Generated", new Date(cert?.generated_at || bridge.generated_at).toLocaleString()]);
+  if (cert?.model_version)
+    metaItems.push(["Model Version", cert.model_version]);
+  if (cert?.estimated_remaining_service_life_years != null)
+    metaItems.push(["Est. Remaining Life", `${cert.estimated_remaining_service_life_years} years`]);
+  metaItems.push(["Report ID", rid]);
 
-    const cols = 3;
-    const colW = CONTENT_W / cols;
-    meta.forEach(([label, value], i) => {
-      const cx = MARGIN + (i % cols) * colW;
-      const cy = y + Math.floor(i / cols) * 13;
-      doc.setFont(F, "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(156, 163, 175);
-      doc.text(label, cx, cy);
-      doc.setFont(F, "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(31, 41, 55);
-      doc.text(value.charAt(0).toUpperCase() + value.slice(1), cx, cy + 5.5);
-    });
-    y += Math.ceil(meta.length / cols) * 13 + 2;
-    y = hRule(doc, y);
-  }
-
-  if (bridge.condition_summary) {
-    y = sectionTitle(doc, "Condition Summary", y, F);
+  metaItems.forEach(([label, value], i) => {
+    const cx = MARGIN + (i % cols) * colW;
+    const cy = y + Math.floor(i / cols) * 13;
     doc.setFont(F, "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(55, 65, 81);
-    const sumLines = doc.splitTextToSize(bridge.condition_summary, CONTENT_W);
-    doc.text(sumLines, MARGIN, y);
-    y += sumLines.length * 5 + 2;
-    y = hRule(doc, y);
+    doc.setFontSize(11);
+    doc.setTextColor(156, 163, 175);
+    doc.text(label.toUpperCase(), cx, cy);
+    doc.setFont(F, "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(31, 41, 55);
+    doc.text(String(value), cx, cy + 5.5);
+  });
+  y += Math.ceil(metaItems.length / cols) * 13 + 2;
+  y = hRule(doc, y);
+
+  // ── Executive Summary box ─────────────────────────────────────────────────
+  const summary = bridge.condition_summary || cert?.recommended_action || "";
+  if (summary) {
+    y = sectionTitle(doc, "Executive Summary", y, F);
+    const sumLines = doc.splitTextToSize(summary, CONTENT_W - 14);
+    const boxH     = sumLines.length * 5.2 + 12;
+    y = ensureSpace(doc, y, boxH + 4);
+
+    // Box background
+    doc.setFillColor(249, 250, 251);
+    doc.setDrawColor(209, 213, 219);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(MARGIN, y - 2, CONTENT_W, boxH, 2, 2, "DF");
+
+    // Left accent bar (score colour)
+    doc.setFillColor(rr, rg, rb);
+    doc.rect(MARGIN, y - 2, 3.5, boxH, "F");
+
+    doc.setFont(F, "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(31, 41, 55);
+    doc.text(sumLines, MARGIN + 7, y + 5);
+    y += boxH + 6;
   }
 
+  // ── Key Risk Factors ──────────────────────────────────────────────────────
   if (bridge.key_risk_factors?.length) {
+    y = hRule(doc, y);
     y = sectionTitle(doc, "Key Risk Factors", y, F);
     for (const f of bridge.key_risk_factors) {
       y = ensureSpace(doc, y, 8);
       doc.setFont(F, "bold");
-      doc.setFontSize(8);
+      doc.setFontSize(11);
       doc.setTextColor(220, 38, 38);
       doc.text("\u25B6", MARGIN, y);
       doc.setFont(F, "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(10.5);
       doc.setTextColor(55, 65, 81);
       const flines = doc.splitTextToSize(f, CONTENT_W - 6);
       doc.text(flines, MARGIN + 5, y);
       y += flines.length * 5 + 1.5;
     }
-    y += 1;
+  }
+
+  return y;
+}
+
+// ─── PAGE 2: 11-Criterion Assessment Table ────────────────────────────────────
+
+function buildCriteriaTablePage(doc, cert, F) {
+  doc.addPage();
+  let y = 18;
+
+  // Page title
+  doc.setFont(F, "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Multi-Criteria Risk Assessment", MARGIN, y);
+  y += 3;
+
+  doc.setFont(F, "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(107, 114, 128);
+  doc.text(`Physics-based evaluation across ${cert.criteria_results?.length || 0} engineering risk domains`, MARGIN, y + 4);
+  y += 8;
+  y = hRule(doc, y);
+
+  const criteria = cert.criteria_results || [];
+
+  // ── Table header ──────────────────────────────────────────────────────────
+  // Column definitions: x offset from MARGIN, width
+  const COL = {
+    rank:    { x: 0,    w: 8  },
+    name:    { x: 8,    w: 72 },
+    score:   { x: 80,   w: 18 },
+    bar:     { x: 98,   w: 28 },
+    conf:    { x: 126,  w: 20 },
+    prob:    { x: 146,  w: 20 },
+    status:  { x: 166,  w: 16 },
+  };
+
+  const ROW_H = 8.5;
+  const HDR_H = 9;
+
+  // Header background
+  doc.setFillColor(17, 24, 39);
+  doc.rect(MARGIN, y, CONTENT_W, HDR_H, "F");
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(156, 163, 175);
+
+  const headers = [
+    ["#",           COL.rank],
+    ["CRITERION",   COL.name],
+    ["SCORE",       COL.score],
+    ["RISK BAR",    COL.bar],
+    ["CONFIDENCE",  COL.conf],
+    ["PROBABILITY", COL.prob],
+    ["STATUS",      COL.status],
+  ];
+
+  for (const [label, col] of headers) {
+    doc.text(label, MARGIN + col.x + 1, y + 6);
+  }
+  y += HDR_H;
+
+  // ── Table rows ────────────────────────────────────────────────────────────
+  for (let i = 0; i < criteria.length; i++) {
+    const cr  = criteria[i];
+    const hex = scoreHex(cr.score);
+    const [rr, rg, rb] = hexToRgb(hex);
+
+    y = ensureSpace(doc, y, ROW_H + 2);
+
+    // Alternating row background
+    if (i % 2 === 0) {
+      doc.setFillColor(249, 250, 251);
+    } else {
+      doc.setFillColor(255, 255, 255);
+    }
+    doc.rect(MARGIN, y, CONTENT_W, ROW_H, "F");
+
+    // Left colour stripe (score severity)
+    doc.setFillColor(rr, rg, rb);
+    doc.rect(MARGIN, y, 2, ROW_H, "F");
+
+    const textY = y + 5.8;
+
+    // Rank
+    doc.setFont(F, "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text(String(cr.criterion_rank ?? i + 1), MARGIN + COL.rank.x + 2, textY, { align: "center" });
+
+    // Criterion name (truncated if needed)
+    const nameStr   = cr.criterion_name || "";
+    const maxNW     = COL.name.w - 3;
+    doc.setFont(F, "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(31, 41, 55);
+    const truncName = doc.getTextWidth(nameStr) > maxNW
+      ? doc.splitTextToSize(nameStr, maxNW)[0] + "\u2026"
+      : nameStr;
+    doc.text(truncName, MARGIN + COL.name.x + 1, textY);
+
+    // Score number
+    doc.setFont(F, "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(rr, rg, rb);
+    doc.text(cr.score != null ? cr.score.toFixed(1) : "N/A", MARGIN + COL.score.x + 2, textY);
+
+    // Score bar
+    drawScoreBar(doc, MARGIN + COL.bar.x, y + (ROW_H - 3) / 2, cr.score ?? 0, COL.bar.w - 4);
+
+    // Confidence
+    const confColor = confidenceHex(cr.confidence);
+    const [cr2, cg2, cb2] = hexToRgb(confColor);
+    doc.setFont(F, "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(cr2, cg2, cb2);
+    doc.text((cr.confidence || "?").toUpperCase(), MARGIN + COL.conf.x + 2, textY);
+
+    // Failure probability
+    doc.setFont(F, "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(55, 65, 81);
+    const probStr = cr.failure_mode_probability
+      ? cr.failure_mode_probability.charAt(0).toUpperCase() + cr.failure_mode_probability.slice(1)
+      : "\u2014";
+    doc.text(probStr, MARGIN + COL.prob.x + 1, textY);
+
+    // Status: field inspection required?
+    if (cr.requires_field_verification) {
+      doc.setFont(F, "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(146, 64, 14);
+      doc.text("\u26A0 VERIFY", MARGIN + COL.status.x + 1, textY);
+    } else {
+      doc.setFont(F, "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(22, 163, 74);
+      doc.text("\u2714 OK", MARGIN + COL.status.x + 1, textY);
+    }
+
+    // Row bottom border
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.15);
+    doc.line(MARGIN, y + ROW_H, MARGIN + CONTENT_W, y + ROW_H);
+
+    y += ROW_H;
+  }
+
+  y += 4;
+
+  // ── Overall score summary ─────────────────────────────────────────────────
+  y = ensureSpace(doc, y, 28);
+
+  const ovScore = cert.overall_risk_score ?? 0;
+  const ovTier  = cert.overall_risk_tier || tierLabel(ovScore);
+  const ovHex   = tierHex(ovTier);
+  const [or, og, ob] = hexToRgb(ovHex);
+
+  doc.setFillColor(17, 24, 39);
+  doc.roundedRect(MARGIN, y, CONTENT_W, 24, 2, 2, "F");
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(156, 163, 175);
+  doc.text("COMPOSITE RISK SCORE", MARGIN + 5, y + 7);
+
+  doc.setFontSize(20);
+  doc.setTextColor(or, og, ob);
+  doc.text(ovScore.toFixed(2), MARGIN + 5, y + 18);
+
+  doc.setFont(F, "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(156, 163, 175);
+  doc.text(`/ 5.0 \u00B7 ${ovTier} tier \u00B7 Confidence: ${cert.overall_confidence || "?"}`, MARGIN + 24, y + 18);
+
+  doc.setFont(F, "italic");
+  doc.setFontSize(11);
+  doc.setTextColor(107, 114, 128);
+  doc.text(
+    "Weighted composite of 11 physics-based criteria. Score reflects worst-case failure probability envelope.",
+    PAGE_W - MARGIN - 5,
+    y + 7,
+    { align: "right", maxWidth: 90 }
+  );
+
+  y += 28;
+
+  // ── Confidence distribution ───────────────────────────────────────────────
+  y = ensureSpace(doc, y, 22);
+  y += 4;
+  y = sectionTitle(doc, "Confidence Distribution", y, F);
+
+  const confGroups = { high: 0, medium: 0, low: 0 };
+  for (const cr of criteria) {
+    const key = (cr.confidence || "low").toLowerCase();
+    if (key in confGroups) confGroups[key]++;
+  }
+  const total = criteria.length || 1;
+
+  const barGroupW = CONTENT_W;
+  const segColors = { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" };
+  let segX = MARGIN;
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(9.5);
+
+  for (const [key, count] of Object.entries(confGroups)) {
+    const segW = (count / total) * barGroupW;
+    if (segW <= 0) continue;
+    const [r, g, b] = hexToRgb(segColors[key]);
+    doc.setFillColor(r, g, b);
+    doc.rect(segX, y, segW, 6, "F");
+    if (segW > 10) {
+      doc.setTextColor(255, 255, 255);
+      doc.text(`${key.toUpperCase()} (${count})`, segX + segW / 2, y + 4.3, { align: "center" });
+    }
+    segX += segW;
+  }
+  y += 10;
+
+  return y;
+}
+
+// ─── PAGE 3: Criterion Details ────────────────────────────────────────────────
+
+function buildCriterionDetailsPage(doc, cert, F) {
+  doc.addPage();
+  let y = 18;
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Criterion Detail Analysis", MARGIN, y);
+  y += 3;
+
+  doc.setFont(F, "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(107, 114, 128);
+  doc.text("Criteria with score \u22652.5 or requiring field verification", MARGIN, y + 4);
+  y += 10;
+  y = hRule(doc, y);
+
+  const criteria = (cert.criteria_results || []).filter(
+    (cr) => (cr.score ?? 0) >= 2.5 || cr.requires_field_verification
+  );
+
+  if (criteria.length === 0) {
+    doc.setFont(F, "italic");
+    doc.setFontSize(10.5);
+    doc.setTextColor(22, 163, 74);
+    doc.text("All criteria scored below threshold. No elevated-risk criteria to detail.", MARGIN, y + 6);
+    return y;
+  }
+
+  for (const cr of criteria) {
+    const hex = scoreHex(cr.score ?? 0);
+    const [rr, rg, rb] = hexToRgb(hex);
+
+    // Estimate block height
+    const findings    = cr.key_findings || [];
+    const sources     = cr.data_sources_used || [];
+    const scopeLines  = cr.requires_field_verification && cr.field_verification_scope
+      ? doc.splitTextToSize(cr.field_verification_scope, CONTENT_W - 18)
+      : [];
+
+    const blockH = 10                               // header
+      + 3                                            // bar row
+      + findings.length * 5                          // findings
+      + (sources.length > 0 ? 10 : 0)               // sources row
+      + (scopeLines.length > 0 ? scopeLines.length * 4.5 + 14 : 0) // scope box
+      + 6;                                           // padding
+
+    y = ensureSpace(doc, y, blockH);
+
+    // Card background
+    doc.setFillColor(249, 250, 251);
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(MARGIN, y, CONTENT_W, blockH - 4, 2, 2, "DF");
+
+    // Left coloured accent
+    doc.setFillColor(rr, rg, rb);
+    doc.rect(MARGIN, y, 3, blockH - 4, "F");
+
+    const innerX = MARGIN + 6;
+    const innerW = CONTENT_W - 9;
+
+    // Rank badge + criterion name
+    doc.setFont(F, "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(rr, rg, rb);
+    doc.text(`#${cr.criterion_rank ?? ""}`, innerX, y + 5.5);
+
+    doc.setFont(F, "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(17, 24, 39);
+    doc.text(cr.criterion_name || "", innerX + 8, y + 5.5);
+
+    // Score + tier chip inline
+    const scoreStr = cr.score != null ? cr.score.toFixed(1) : "N/A";
+    const chipW    = drawChip(doc, `${scoreStr} / 5.0`, PAGE_W - MARGIN - 30, y + 5.5, hex, F);
+    const tierStr  = tierLabel(cr.score ?? 0);
+    drawChip(doc, tierStr, PAGE_W - MARGIN - 30 + chipW + 2, y + 5.5, hex, F);
+
+    let cy = y + 10;
+
+    // Score bar
+    doc.setFont(F, "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(107, 114, 128);
+    doc.text("RISK LEVEL", innerX, cy);
+    drawScoreBar(doc, innerX + 22, cy - 2.5, cr.score ?? 0, 60);
+    cy += 6;
+
+    // Key findings
+    if (findings.length > 0) {
+      doc.setFont(F, "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(107, 114, 128);
+      doc.text("KEY FINDINGS", innerX, cy);
+      cy += 4.5;
+
+      for (const finding of findings) {
+        y = ensureSpace(doc, cy, 6);
+        if (y !== cy) {
+          // Moved to new page, redraw card context at top
+          cy = y;
+        }
+        doc.setFont(F, "normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(55, 65, 81);
+        doc.text("\u2022", innerX, cy);
+        const flines = doc.splitTextToSize(finding, innerW - 6);
+        doc.text(flines, innerX + 4, cy);
+        cy += flines.length * 4.8;
+      }
+    }
+
+    // Data sources
+    if (sources.length > 0) {
+      cy += 2;
+      doc.setFont(F, "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(107, 114, 128);
+      doc.text("DATA SOURCES", innerX, cy);
+      cy += 4;
+
+      let chipX = innerX;
+      for (const src of sources) {
+        const sw = doc.getTextWidth(src) + 8;
+        if (chipX + sw > PAGE_W - MARGIN - 2) {
+          chipX  = innerX;
+          cy    += 6;
+        }
+        doc.setFillColor(241, 245, 249);
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.2);
+        doc.roundedRect(chipX, cy - 3, sw, 5, 0.7, 0.7, "DF");
+        doc.setFont(F, "normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(71, 85, 105);
+        doc.text(src, chipX + 4, cy + 0.8);
+        chipX += sw + 2;
+      }
+      cy += 6;
+    }
+
+    // Field verification scope warning box
+    if (scopeLines.length > 0) {
+      cy = ensureSpace(doc, cy, scopeLines.length * 4.5 + 14);
+      const warnH = scopeLines.length * 4.5 + 10;
+      doc.setFillColor(254, 243, 199); // amber-100
+      doc.setDrawColor(146, 64, 14);   // amber-800
+      doc.setLineWidth(0.4);
+      doc.roundedRect(innerX, cy, innerW, warnH, 1.5, 1.5, "DF");
+
+      doc.setFont(F, "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(146, 64, 14);
+      doc.text("\u26A0  FIELD INSPECTION REQUIRED", innerX + 4, cy + 5);
+
+      doc.setFont(F, "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(120, 53, 15);
+      doc.text(scopeLines, innerX + 4, cy + 10);
+      cy += warnH + 4;
+    }
+
+    y = cy + 4;
     y = hRule(doc, y);
   }
 
-  if (bridge.recommended_action) {
+  return y;
+}
+
+// ─── PAGE 4: Field Inspection Priorities & Data Traceability ─────────────────
+
+function buildFieldInspectionPage(doc, cert, bridge, F) {
+  doc.addPage();
+  let y = 18;
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Field Inspection Priorities & Data Traceability", MARGIN, y);
+  y += 3;
+  doc.setFont(F, "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(107, 114, 128);
+  doc.text("Actionable field program and source traceability for this assessment", MARGIN, y + 4);
+  y += 10;
+  y = hRule(doc, y);
+
+  // ── Recommended Action ────────────────────────────────────────────────────
+  const recAction = cert?.recommended_action || bridge.recommended_action;
+  if (recAction) {
     y = sectionTitle(doc, "Recommended Action", y, F);
-    const aLines = doc.splitTextToSize(bridge.recommended_action, CONTENT_W - 8);
-    const boxH   = aLines.length * 5 + 10;
+    const tier     = cert?.overall_risk_tier || bridge.risk_tier || "UNKNOWN";
+    const hex      = tierHex(tier);
+    const [rr, rg, rb] = hexToRgb(hex);
+    const aLines   = doc.splitTextToSize(recAction, CONTENT_W - 10);
+    const boxH     = aLines.length * 5.2 + 10;
     y = ensureSpace(doc, y, boxH + 4);
-    const [tr, tg, tb] = tint(riskHex, 0.12);
+    const [tr, tg, tb] = tint(hex, 0.12);
     doc.setFillColor(tr, tg, tb);
     doc.setDrawColor(rr, rg, rb);
     doc.setLineWidth(0.4);
     doc.roundedRect(MARGIN, y - 2, CONTENT_W, boxH, 2, 2, "DF");
-    doc.setLineWidth(0.2);
     doc.setFillColor(rr, rg, rb);
     doc.rect(MARGIN, y - 2, 3.5, boxH, "F");
     doc.setFont(F, "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(10.5);
     doc.setTextColor(rr, rg, rb);
     doc.text(aLines, MARGIN + 7, y + 4);
     y += boxH + 4;
     y = hRule(doc, y);
   }
 
+  // ── Priority Field Inspections ordered list ───────────────────────────────
+  const priorities = cert?.priority_field_inspections || [];
+  if (priorities.length > 0) {
+    y = sectionTitle(doc, "Priority Field Inspections", y, F);
+
+    for (let i = 0; i < priorities.length; i++) {
+      const item = priorities[i];
+      y = ensureSpace(doc, y, 16);
+
+      // Number badge
+      doc.setFillColor(17, 24, 39);
+      doc.circle(MARGIN + 3.5, y + 2, 3.5, "F");
+      doc.setFont(F, "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text(String(i + 1), MARGIN + 3.5, y + 3.8, { align: "center" });
+
+      // Item text
+      doc.setFont(F, "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(31, 41, 55);
+      const ilines = doc.splitTextToSize(item, CONTENT_W - 12);
+      doc.text(ilines, MARGIN + 10, y + 3.5);
+      y += ilines.length * 5 + 4;
+    }
+    y = hRule(doc, y);
+  }
+
+  // ── Estimated Remaining Service Life ─────────────────────────────────────
+  if (cert?.estimated_remaining_service_life_years != null) {
+    y = sectionTitle(doc, "Structural Life Estimate", y, F);
+    y = ensureSpace(doc, y, 20);
+
+    const lifeYears = cert.estimated_remaining_service_life_years;
+    const lifeHex   = lifeYears >= 30 ? "#16A34A" : lifeYears >= 15 ? "#CA8A04" : "#DC2626";
+    const [lr, lg, lb] = hexToRgb(lifeHex);
+
+    doc.setFillColor(249, 250, 251);
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(MARGIN, y, CONTENT_W, 16, 2, 2, "DF");
+
+    doc.setFont(F, "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(lr, lg, lb);
+    doc.text(`${lifeYears}`, MARGIN + 6, y + 12);
+
+    doc.setFont(F, "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text("years estimated remaining service life", MARGIN + 20, y + 12);
+
+    doc.setFont(F, "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text(
+      "Based on structural assessment model. Subject to field verification and load rating.",
+      PAGE_W - MARGIN - 2,
+      y + 8,
+      { align: "right", maxWidth: 90 }
+    );
+
+    y += 20;
+    y = hRule(doc, y);
+  }
+
+  // ── Assessment Limitations ────────────────────────────────────────────────
+  const limitations = cert?.assessment_limitations || [];
+  if (limitations.length > 0) {
+    y = sectionTitle(doc, "Assessment Limitations", y, F);
+
+    for (const lim of limitations) {
+      y = ensureSpace(doc, y, 8);
+      doc.setFont(F, "italic");
+      doc.setFontSize(10.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text("\u2022", MARGIN, y);
+      const llines = doc.splitTextToSize(lim, CONTENT_W - 6);
+      doc.text(llines, MARGIN + 5, y);
+      y += llines.length * 4.5 + 1.5;
+    }
+    y += 2;
+    y = hRule(doc, y);
+  }
+
+  // ── Data Sources Traceability ─────────────────────────────────────────────
+  const dataSources = cert?.data_sources_summary || [];
+  if (dataSources.length > 0) {
+    y = sectionTitle(doc, "Data Sources & Traceability", y, F);
+
+    const srcCols = 2;
+    const srcColW = CONTENT_W / srcCols;
+    let rowStart = y;
+
+    for (let i = 0; i < dataSources.length; i++) {
+      const src = dataSources[i];
+      const col = i % srcCols;
+      const cx  = MARGIN + col * srcColW;
+
+      // Start a new row
+      if (col === 0 && i > 0) {
+        rowStart += 8;
+      }
+      // Check page break at start of each row
+      if (col === 0) {
+        rowStart = ensureSpace(doc, rowStart, 8);
+      }
+
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(cx, rowStart, srcColW - 4, 6.5, 1, 1, "F");
+
+      doc.setFont(F, "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(71, 85, 105);
+      const srcLines = doc.splitTextToSize(src, srcColW - 10);
+      doc.text(srcLines[0], cx + 4, rowStart + 4.5);
+    }
+    y = rowStart + 8 + 4;
+  }
+
+  // ── Maintenance Tasks ─────────────────────────────────────────────────────
   if (bridge.maintenance_notes?.length) {
+    y = hRule(doc, y);
     y = sectionTitle(doc, "Maintenance Tasks", y, F);
     for (const n of bridge.maintenance_notes) {
       y = ensureSpace(doc, y, 8);
       doc.setFont(F, "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(10.5);
       doc.setTextColor(107, 114, 128);
       doc.text("\u2022", MARGIN, y);
       doc.setTextColor(55, 65, 81);
@@ -327,191 +1033,267 @@ async function buildPdf(bridge: any) {
       doc.text(nlines, MARGIN + 5, y);
       y += nlines.length * 5 + 1.5;
     }
-    y += 1;
-    y = hRule(doc, y);
   }
 
+  // ── Confidence Caveat ─────────────────────────────────────────────────────
   if (bridge.confidence_caveat) {
     y = ensureSpace(doc, y, 12);
+    y += 4;
     doc.setFont(F, "italic");
-    doc.setFontSize(7.5);
+    doc.setFontSize(10.5);
     doc.setTextColor(156, 163, 175);
     const cLines = doc.splitTextToSize(`Note: ${bridge.confidence_caveat}`, CONTENT_W);
     doc.text(cLines, MARGIN, y);
     y += cLines.length * 4.5 + 4;
   }
 
+  return y;
+}
+
+// ─── PAGE 5+: Street View Imagery & Defect Analysis (preserved) ───────────────
+
+async function buildImageryPages(doc, bridge, F) {
   const perHeading = bridge.per_heading_assessments || {};
 
   const fetchResults = await Promise.all(
     HEADINGS.map(async (h) => {
       const va  = perHeading[String(h.value)] ?? bridge.visual_assessment ?? null;
-      const url = `${API_BASE}/api/v1/images/${bridge.bridge_id}/${h.value}`;
-      let img = await fetchImageWithOverlay(url, va);
-      if (!img) {
-        const fallbackUrl = `${API_BASE}/api/images/${bridge.bridge_id}/${h.value}`;
-        img = await fetchImageWithOverlay(fallbackUrl, va);
-      }
+      const url = `${API_BASE}/api/images/${bridge.bridge_id}/${h.value}`;
+      const img = await fetchImageWithOverlay(url, va);
       return { heading: h, va, img };
     })
   );
 
   const validImages = fetchResults.filter((r) => r.img !== null);
 
-  if (validImages.length > 0) {
-    doc.addPage();
-    y = 18;
+  if (validImages.length === 0) return;
 
-    doc.setFont(F, "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(17, 24, 39);
-    doc.text("Street View Imagery & Defect Analysis", MARGIN, y);
-    y += 3;
+  doc.addPage();
+  let y = 18;
+
+  doc.setFont(F, "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(17, 24, 39);
+  doc.text("Street View Imagery & Defect Analysis", MARGIN, y);
+  y += 3;
+  y = hRule(doc, y);
+  y += 2;
+
+  for (const { heading, va, img } of validImages) {
+    const imgW = CONTENT_W;
+    const imgH = Math.min(imgW / img.aspectRatio, 88);
+
+    y = ensureSpace(doc, y, imgH + 28);
+
+    y = sectionTitle(doc, `${heading.label} View  (${heading.value}\u00B0)`, y, F);
+
+    doc.addImage(img.dataUrl, "JPEG", MARGIN, y, imgW, imgH);
+
+    // Visual score badge
+    if (va?.overall_visual_score != null) {
+      const scoreText = `Visual score: ${va.overall_visual_score.toFixed(1)}/5`;
+      doc.setFont(F, "bold");
+      doc.setFontSize(9.5);
+      const sw = doc.getTextWidth(scoreText) + 7;
+      doc.setFillColor(0, 0, 0);
+      doc.roundedRect(MARGIN + 2, y + 2, sw, 6.5, 1, 1, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.text(scoreText, MARGIN + 5, y + 7);
+    }
+
+    y += imgH + 5;
+
+    const activeDefects = DEFECT_KEYS
+      .map((key) => ({ key, ...(va?.[key] || {}) }))
+      .filter((d) => d.score >= 2)
+      .sort((a, b) => b.score - a.score);
+
+    if (activeDefects.length > 0) {
+      // Defect chips row
+      doc.setFont(F, "bold");
+      doc.setFontSize(9.5);
+      let chipX = MARGIN;
+      for (const d of activeDefects) {
+        const [cr, cg, cb] = hexToRgb(DEFECT_COLORS_HEX[d.key]);
+        const chipText = `${d.key.replace(/_/g, " ")} \u00B7 ${d.score}/5`;
+        const chipW    = doc.getTextWidth(chipText) + 6;
+        if (chipX + chipW > PAGE_W - MARGIN + 2) {
+          chipX  = MARGIN;
+          y     += 7;
+        }
+        doc.setFillColor(cr, cg, cb);
+        doc.roundedRect(chipX, y, chipW, 6, 1, 1, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.text(chipText, chipX + 3, y + 4.5);
+        chipX += chipW + 2;
+      }
+      y += 10;
+
+      // Per-defect analysis cards
+      for (const d of activeDefects) {
+        const [cr, cg, cb] = hexToRgb(DEFECT_COLORS_HEX[d.key]);
+        const severity   = d.score >= 4 ? "CRITICAL" : d.score >= 3 ? "HIGH" : "MODERATE";
+        const obsLines   = d.key_observations
+          ? doc.splitTextToSize(d.key_observations, CONTENT_W - 8)
+          : [];
+        const causeLines = d.potential_cause
+          ? doc.splitTextToSize(`Cause: ${d.potential_cause}`, CONTENT_W - 8)
+          : [];
+        const blockH = 8 + obsLines.length * 4.5 + causeLines.length * 4.5 + 4;
+        y = ensureSpace(doc, y, blockH);
+
+        // Coloured left accent line
+        doc.setDrawColor(cr, cg, cb);
+        doc.setLineWidth(1.5);
+        doc.line(MARGIN, y - 1, MARGIN, y + blockH - 5);
+        doc.setLineWidth(0.2);
+        doc.setDrawColor(0, 0, 0);
+
+        // Defect name
+        doc.setFont(F, "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(31, 41, 55);
+        const defectLabel = d.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        doc.text(defectLabel, MARGIN + 4, y + 3.5);
+
+        // Severity chip
+        const nameW = doc.getTextWidth(defectLabel);
+        doc.setFontSize(11);
+        const sevW  = doc.getTextWidth(severity) + 5;
+        doc.setFillColor(cr, cg, cb);
+        doc.roundedRect(MARGIN + 4 + nameW + 3, y + 0.5, sevW, 5.5, 0.8, 0.8, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.text(severity, MARGIN + 4 + nameW + 3 + sevW / 2, y + 4.5, { align: "center" });
+
+        y += 7;
+
+        if (obsLines.length > 0) {
+          doc.setFont(F, "normal");
+          doc.setFontSize(11);
+          doc.setTextColor(55, 65, 81);
+          doc.text(obsLines, MARGIN + 4, y);
+          y += obsLines.length * 4.5;
+        }
+
+        if (causeLines.length > 0) {
+          doc.setFont(F, "italic");
+          doc.setFontSize(10.5);
+          doc.setTextColor(107, 114, 128);
+          doc.text(causeLines, MARGIN + 4, y);
+          y += causeLines.length * 4.5;
+        }
+
+        y += 4;
+      }
+    } else if (va) {
+      doc.setFont(F, "italic");
+      doc.setFontSize(11);
+      doc.setTextColor(22, 163, 74);
+      doc.text("No significant defects detected in this view.", MARGIN, y);
+      y += 7;
+    }
+
+    y += 2;
     y = hRule(doc, y);
     y += 2;
+  }
+}
 
-    for (const { heading, va, img } of validImages) {
-      if (!img) continue;
-      const imgW = CONTENT_W;
-      const imgH = Math.min(imgW / img.aspectRatio, 88);
+// ─── Main PDF builder ─────────────────────────────────────────────────────────
 
-      y = ensureSpace(doc, y, imgH + 28);
+async function buildPdf(bridge) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-      y = sectionTitle(doc, `${heading.label} View  (${heading.value}\u00B0)`, y, F);
+  // F = 'Roboto' (Unicode, supports Polish) or 'helvetica' if offline
+  const F   = await ensureFonts(doc);
+  const rid = reportId(bridge);
+  const cert = bridge.certificate ?? null;
 
-      doc.addImage(img.dataUrl, "JPEG", MARGIN, y, imgW, imgH);
+  // ── PAGE 1: Cover + Executive Summary ─────────────────────────────────────
+  try {
+    buildCoverPage(doc, bridge, cert, F, rid);
+  } catch (e) {
+    console.error("[PDF] Cover page error:", e);
+  }
 
-      if (va?.overall_visual_score != null) {
-        const scoreText = `Visual score: ${va.overall_visual_score.toFixed(1)}/5`;
-        doc.setFont(F, "bold");
-        doc.setFontSize(7);
-        const sw = doc.getTextWidth(scoreText) + 6;
-        doc.setFillColor(0, 0, 0);
-        doc.roundedRect(MARGIN + 2, y + 2, sw, 6.5, 1, 1, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.text(scoreText, MARGIN + 5, y + 7);
-      }
-
-      y += imgH + 5;
-
-      const activeDefects = DEFECT_KEYS
-        .map((key) => ({ key, ...(va?.[key] || {}) }))
-        .filter((d) => d.score >= 2)
-        .sort((a, b) => b.score - a.score);
-
-      if (activeDefects.length > 0) {
-        doc.setFont(F, "bold");
-        doc.setFontSize(7);
-        let chipX = MARGIN;
-        for (const d of activeDefects) {
-          const [cr, cg, cb] = hexToRgb(DEFECT_COLORS_HEX[d.key]);
-          const chipText = `${d.key.replace(/_/g, " ")} \u00B7 ${d.score}/5`;
-          const chipW    = doc.getTextWidth(chipText) + 6;
-          if (chipX + chipW > PAGE_W - MARGIN + 2) {
-            chipX  = MARGIN;
-            y     += 7;
-          }
-          doc.setFillColor(cr, cg, cb);
-          doc.roundedRect(chipX, y, chipW, 6, 1, 1, "F");
-          doc.setTextColor(255, 255, 255);
-          doc.text(chipText, chipX + 3, y + 4.5);
-          chipX += chipW + 2;
-        }
-        y += 10;
-
-        for (const d of activeDefects) {
-          const [cr, cg, cb] = hexToRgb(DEFECT_COLORS_HEX[d.key]);
-          const severity  = d.score >= 4 ? "CRITICAL" : d.score >= 3 ? "HIGH" : "MODERATE";
-          const obsLines  = d.key_observations
-            ? doc.splitTextToSize(d.key_observations, CONTENT_W - 8)
-            : [];
-          const causeLines = d.potential_cause
-            ? doc.splitTextToSize(`Cause: ${d.potential_cause}`, CONTENT_W - 8)
-            : [];
-          const blockH = 8 + obsLines.length * 4.5 + causeLines.length * 4.5 + 4;
-          y = ensureSpace(doc, y, blockH);
-
-          doc.setDrawColor(cr, cg, cb);
-          doc.setLineWidth(1.5);
-          doc.line(MARGIN, y - 1, MARGIN, y + blockH - 5);
-          doc.setLineWidth(0.2);
-          doc.setDrawColor(0, 0, 0);
-
-          doc.setFont(F, "bold");
-          doc.setFontSize(8.5);
-          doc.setTextColor(31, 41, 55);
-          const defectLabel = d.key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-          doc.text(defectLabel, MARGIN + 4, y + 3.5);
-
-          const nameW = doc.getTextWidth(defectLabel);
-          doc.setFontSize(6.5);
-          const sevW  = doc.getTextWidth(severity) + 5;
-          doc.setFillColor(cr, cg, cb);
-          doc.roundedRect(MARGIN + 4 + nameW + 3, y + 0.5, sevW, 5.5, 0.8, 0.8, "F");
-          doc.setTextColor(255, 255, 255);
-          doc.text(severity, MARGIN + 4 + nameW + 3 + sevW / 2, y + 4.5, { align: "center" });
-
-          y += 7;
-
-          if (obsLines.length > 0) {
-            doc.setFont(F, "normal");
-            doc.setFontSize(8);
-            doc.setTextColor(55, 65, 81);
-            doc.text(obsLines, MARGIN + 4, y);
-            y += obsLines.length * 4.5;
-          }
-
-          if (causeLines.length > 0) {
-            doc.setFont(F, "italic");
-            doc.setFontSize(7.5);
-            doc.setTextColor(107, 114, 128);
-            doc.text(causeLines, MARGIN + 4, y);
-            y += causeLines.length * 4.5;
-          }
-
-          y += 4;
-        }
-      } else if (va) {
-        doc.setFont(F, "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(22, 163, 74);
-        doc.text("No significant defects detected in this view.", MARGIN, y);
-        y += 7;
-      }
-
-      y += 2;
-      y = hRule(doc, y);
-      y += 2;
+  // ── PAGE 2: 11-Criterion Assessment Table (only if certificate present) ───
+  if (cert?.criteria_results?.length > 0) {
+    try {
+      buildCriteriaTablePage(doc, cert, F);
+    } catch (e) {
+      console.error("[PDF] Criteria table error:", e);
     }
   }
 
+  // ── PAGE 3: Criterion Details ─────────────────────────────────────────────
+  if (cert?.criteria_results?.length > 0) {
+    try {
+      buildCriterionDetailsPage(doc, cert, F);
+    } catch (e) {
+      console.error("[PDF] Criterion details error:", e);
+    }
+  }
+
+  // ── PAGE 4: Field Inspection Priorities & Traceability ───────────────────
+  try {
+    if (cert) {
+      buildFieldInspectionPage(doc, cert, bridge, F);
+    } else {
+      // Backward compat: no certificate — render original sections
+      if (bridge.maintenance_notes?.length || bridge.confidence_caveat) {
+        doc.addPage();
+        let y = 18;
+        if (bridge.maintenance_notes?.length) {
+          y = sectionTitle(doc, "Maintenance Tasks", y, F);
+          for (const n of bridge.maintenance_notes) {
+            y = ensureSpace(doc, y, 8);
+            doc.setFont(F, "normal");
+            doc.setFontSize(10.5);
+            doc.setTextColor(107, 114, 128);
+            doc.text("\u2022", MARGIN, y);
+            doc.setTextColor(55, 65, 81);
+            const nlines = doc.splitTextToSize(n, CONTENT_W - 6);
+            doc.text(nlines, MARGIN + 5, y);
+            y += nlines.length * 5 + 1.5;
+          }
+        }
+        if (bridge.confidence_caveat) {
+          y = ensureSpace(doc, y, 12);
+          doc.setFont(F, "italic");
+          doc.setFontSize(10.5);
+          doc.setTextColor(156, 163, 175);
+          const cLines = doc.splitTextToSize(`Note: ${bridge.confidence_caveat}`, CONTENT_W);
+          doc.text(cLines, MARGIN, y);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[PDF] Field inspection page error:", e);
+  }
+
+  // ── PAGE 5+: Street View Imagery & Defect Analysis ───────────────────────
+  try {
+    await buildImageryPages(doc, bridge, F);
+  } catch (e) {
+    console.error("[PDF] Imagery pages error:", e);
+  }
+
+  // ── Footer on every page ──────────────────────────────────────────────────
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
-    doc.setPage(p);
-    doc.setFillColor(243, 244, 246);
-    doc.rect(0, PAGE_H - 10, PAGE_W, 10, "F");
-    doc.setDrawColor(229, 231, 235);
-    doc.setLineWidth(0.3);
-    doc.line(0, PAGE_H - 10, PAGE_W, PAGE_H - 10);
-    doc.setFont(F, "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(156, 163, 175);
-    doc.text("DeepInspect  \u00B7  AI-powered infrastructure risk assessment", MARGIN, PAGE_H - 4);
-    doc.text(`Page ${p} of ${totalPages}`, PAGE_W - MARGIN, PAGE_H - 4, { align: "right" });
+    drawFooter(doc, F, p, totalPages, rid);
   }
 
   doc.save(`deepinspect-${bridge.bridge_id}.pdf`);
 }
 
-interface ReportExportProps {
-  bridge: any;
-}
+// ─── Button component ─────────────────────────────────────────────────────────
 
-export default function ReportExport({ bridge }: ReportExportProps) {
+export default function ReportExport({ bridge }) {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  const handlePdfExport = async () => {
+  const handleClick = async () => {
     setLoading(true);
     setDone(false);
     try {
@@ -521,7 +1303,7 @@ export default function ReportExport({ bridge }: ReportExportProps) {
         description: bridge.bridge_name || `Bridge ${bridge.bridge_id}`,
       });
       setTimeout(() => setDone(false), 2000);
-    } catch (err: any) {
+    } catch (err) {
       console.error("PDF generation error:", err);
       toast.error("PDF generation failed", { description: err.message });
     } finally {
@@ -529,92 +1311,34 @@ export default function ReportExport({ bridge }: ReportExportProps) {
     }
   };
 
-  const handleJsonExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bridge, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href",     dataStr);
-    downloadAnchorNode.setAttribute("download", `deepinspect-${bridge.bridge_id}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    toast.success("JSON report downloaded");
-  };
-
-  const handleCsvExport = () => {
-    const headers = ["Bridge ID", "Name", "Risk Tier", "Risk Score", "Lat", "Lon", "Built", "Material", "Condition"];
-    const row = [
-      bridge.bridge_id,
-      bridge.bridge_name || "",
-      bridge.risk_tier,
-      bridge.risk_score,
-      bridge.lat,
-      bridge.lon,
-      bridge.context?.construction_year || "",
-      bridge.context?.material || "",
-      `"${(bridge.condition_summary || "").replace(/"/g, '""')}"`
-    ];
-    
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row.join(",");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `deepinspect-${bridge.bridge_id}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    toast.success("CSV report downloaded");
-  };
-
   return (
-    <div className="flex flex-col gap-2">
-      <button
-        onClick={handlePdfExport}
-        disabled={loading}
-        className={`w-full py-2.5 text-xs font-mono font-bold tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${
-          loading
-            ? "bg-surface-2 text-dim cursor-not-allowed"
-            : done
-            ? "bg-severity-ok/10 text-severity-ok border border-severity-ok/20"
-            : "glass-button-accent hover:shadow-glow-cyan"
-        }`}
-        aria-label="Download PDF Report"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-            GENERATING PDF
-          </>
-        ) : done ? (
-          <>
-            <CheckCircle className="w-4 h-4" aria-hidden="true" />
-            DOWNLOADED
-          </>
-        ) : (
-          <>
-            <Download className="w-4 h-4" aria-hidden="true" />
-            DOWNLOAD PDF REPORT
-          </>
-        )}
-      </button>
-      
-      <div className="flex gap-2">
-        <button
-          onClick={handleJsonExport}
-          className="flex-1 py-2 text-xs font-mono font-bold tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 bg-surface-2 hover:bg-surface-3 text-dim hover:text-white border border-glass-border"
-          aria-label="Export JSON"
-        >
-          <FileJson className="w-3.5 h-3.5" aria-hidden="true" />
-          JSON
-        </button>
-        <button
-          onClick={handleCsvExport}
-          className="flex-1 py-2 text-xs font-mono font-bold tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 bg-surface-2 hover:bg-surface-3 text-dim hover:text-white border border-glass-border"
-          aria-label="Export CSV"
-        >
-          <FileText className="w-3.5 h-3.5" aria-hidden="true" />
-          CSV
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className={`w-full py-2.5 text-xs font-mono font-bold tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${
+        loading
+          ? "bg-surface-2 text-dim cursor-not-allowed"
+          : done
+          ? "bg-severity-ok/10 text-severity-ok border border-severity-ok/20"
+          : "glass-button-accent hover:shadow-glow-cyan"
+      }`}
+    >
+      {loading ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          GENERATING PDF
+        </>
+      ) : done ? (
+        <>
+          <CheckCircle className="w-4 h-4" />
+          DOWNLOADED
+        </>
+      ) : (
+        <>
+          <Download className="w-4 h-4" />
+          DOWNLOAD PDF REPORT
+        </>
+      )}
+    </button>
   );
 }

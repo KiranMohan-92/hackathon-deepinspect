@@ -3,6 +3,10 @@ from typing import Optional
 from datetime import datetime
 from .vision import VisualAssessment
 from .context import BridgeContext
+from .criteria import PhysicsHealthCertificate
+from .scour import ScourAssessment
+from .structural_type import StructuralTypeAssessment
+from .degradation import DegradationAssessment
 
 
 class BridgeTarget(BaseModel):
@@ -15,6 +19,9 @@ class BridgeTarget(BaseModel):
     road_class: Optional[str] = None
     max_weight_tons: Optional[float] = None
     street_view_available: bool = True  # optimistic; discovered at analysis time
+    # Hydrological metadata (populated by discovery/hydrological agents)
+    crosses_water: Optional[bool] = None
+    waterway_tags: Optional[dict] = None  # raw OSM waterway tags near bridge
 
 
 class BridgeSummary(BaseModel):
@@ -28,6 +35,7 @@ class BridgeSummary(BaseModel):
     material: Optional[str] = None
     max_weight_tons: Optional[float] = None
     priority_score: float = 1.0  # higher = more important to inspect first
+    crosses_water: Optional[bool] = None  # flagged during discovery
 
 
 class BridgeRiskReport(BaseModel):
@@ -47,6 +55,14 @@ class BridgeRiskReport(BaseModel):
     context: Optional[BridgeContext] = None
     generated_at: datetime
     thinking_steps: list[str] = []    # AI chain-of-thought for final risk report generation
+
+    # ── Physics Health Certificate (NEW — multi-criteria assessment) ────
+    certificate: Optional[PhysicsHealthCertificate] = None
+
+    # ── Per-criterion sub-assessments (for traceability) ────────────────
+    scour_assessment: Optional[ScourAssessment] = None
+    structural_type_assessment: Optional[StructuralTypeAssessment] = None
+    degradation_assessment: Optional[DegradationAssessment] = None
 
 
 class BboxRequest(BaseModel):

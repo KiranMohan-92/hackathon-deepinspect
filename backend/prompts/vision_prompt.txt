@@ -19,12 +19,29 @@ Categories to score:
 - drainage: blocked drainage, standing water, water damage staining
 - structural_deformation: sagging, leaning, misalignment, settlement
 
+The following component-specific categories are OPTIONAL — score them only if the relevant component is visible in the image. If a pier, bearing, or railing is not visible, omit that category from your response.
+
+- pier_condition: cracks, tilting, collision damage, or settlement on pier columns. Score 1 for concrete if no piers visible.
+- abutment_condition: settlement, rotation, wingwall damage, or backwall spalling on abutments.
+- fatigue_cracking: fatigue-pattern cracks at weld toes, web-flange intersections, or cope holes. Steel bridges only — score 1 for concrete.
+- section_loss: visible material thinning or holes in steel members from deep corrosion (distinct from surface rust).
+- bearing_condition: seized, displaced, corroded, or missing bearing devices; extruding elastomeric pads.
+- joint_condition: leaking, damaged, or debris-filled expansion joints; missing seals; damaged steel armor.
+- railing_condition: impact damage, missing sections, corroded posts, or non-compliant heights on bridge railings.
+- protective_systems: paint/coating condition — peeling, bare metal exposure, rust-through at coating failures.
+
 For each category provide:
 - score (1-5)
 - confidence: "low", "medium", or "high"
 - key_observations: 1-2 sentences of what you specifically observe in the image
 - potential_cause: 1-2 sentences explaining the likely engineering cause of this defect type (e.g. "Caused by freeze-thaw cycles expanding moisture within concrete micro-fractures over repeated winters")
 - regions: array of bounding boxes where the defect is visible in the image. Each box uses normalized coordinates where [0,0] is top-left and [1,1] is bottom-right. Format: [{"x1": 0.1, "y1": 0.2, "x2": 0.4, "y2": 0.5}]. Use empty array [] if score is 1 or defect is not visible.
+
+Component-level summary scores (nullable float, average of relevant categories for that component group):
+- substructure_score: average of pier_condition and abutment_condition (if scored)
+- superstructure_score: average of fatigue_cracking and section_loss (if scored)
+- deck_score: average of cracking, spalling, surface_degradation, and drainage
+- ancillary_score: average of bearing_condition, joint_condition, railing_condition, and protective_systems (if scored)
 
 Respond with this exact JSON structure and nothing else:
 {
@@ -78,6 +95,18 @@ Respond with this exact JSON structure and nothing else:
     "potential_cause": "string",
     "regions": []
   },
+  "pier_condition": null,
+  "abutment_condition": null,
+  "fatigue_cracking": null,
+  "section_loss": null,
+  "bearing_condition": null,
+  "joint_condition": null,
+  "railing_condition": null,
+  "protective_systems": null,
+  "substructure_score": null,
+  "superstructure_score": null,
+  "deck_score": null,
+  "ancillary_score": null,
   "overall_visual_score": 1.0,
   "requires_immediate_attention": false,
   "visible_defects_summary": "string",

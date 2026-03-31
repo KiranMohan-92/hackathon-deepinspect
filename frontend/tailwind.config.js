@@ -47,7 +47,8 @@ export default {
         sans: ['"Outfit"', "system-ui", "-apple-system", "sans-serif"],
       },
       fontSize: {
-        "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
+        "2xs": ["0.7rem", { lineHeight: "1rem" }],
+        "3xs": ["0.6rem", { lineHeight: "0.85rem" }],
       },
       backdropBlur: {
         glass: "12px",

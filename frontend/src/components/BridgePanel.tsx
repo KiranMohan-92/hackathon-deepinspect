@@ -1,4 +1,3 @@
-import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Map, ChevronRight, Loader2, CheckCircle, XCircle, Circle, Brain, Eye, BookOpen, Shield } from "lucide-react";
 import useAppStore from "../store/useAppStore";
@@ -8,9 +7,10 @@ import RiskBadge from "./RiskBadge";
 import ReportExport from "./ReportExport";
 import BridgeImageViewer from "./BridgeImageViewer";
 import BridgeList from "./BridgeList";
-import { BridgeSummary, BridgeRiskReport } from "../types";
+import { BridgeDetailSkeleton } from "./SkeletonLoader";
+import PhysicsCertificateView from "./PhysicsCertificateView";
 
-const ROAD_LABELS: Record<string, string> = {
+const ROAD_LABELS = {
   motorway: "Motorway", motorway_link: "Motorway Link",
   trunk: "Trunk Road", trunk_link: "Trunk Link",
   primary: "Primary Road", primary_link: "Primary Link",
@@ -18,15 +18,14 @@ const ROAD_LABELS: Record<string, string> = {
   unclassified: "Local Road", residential: "Residential",
 };
 
-import { Variants } from "framer-motion";
-
-const slidePanel: Variants = {
+const slidePanel = {
   initial: { opacity: 0, x: 20 },
   animate: { opacity: 1, x: 0, transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] } },
   exit: { opacity: 0, x: 20, transition: { duration: 0.2 } },
 };
 
-function MetaItem({ label, value }: { label: string; value: any }) {
+// ─── Metadata item ───────────────────────────────────────────────────────────
+function MetaItem({ label, value }) {
   if (!value) return null;
   return (
     <div>
@@ -36,18 +35,22 @@ function MetaItem({ label, value }: { label: string; value: any }) {
   );
 }
 
-const STAGE_META: Record<string, { icon: React.ElementType; label: string; color: string }> = {
+// ─── Thinking Feed (live AI reasoning) ──────────────────────────────────────
+const STAGE_META = {
   vision: { icon: Eye, label: "VISION", color: "text-accent" },
   context: { icon: BookOpen, label: "CONTEXT", color: "intel-accent" },
+  scour: { icon: Eye, label: "SCOUR", color: "text-severity-high" },
+  structural: { icon: Shield, label: "STRUCTURAL", color: "text-severity-medium" },
+  degradation: { icon: Brain, label: "DEGRADATION", color: "text-severity-high" },
   risk: { icon: Shield, label: "RISK", color: "text-severity-critical" },
 };
 
-function ThinkingFeed({ osm_id }: { osm_id: string }) {
+function ThinkingFeed({ osm_id }) {
   const blocks = useAppStore((s) => s.analysisThinking[osm_id]) || [];
   if (blocks.length === 0) return null;
 
   return (
-    <div className="px-4 py-3 border-b border-glass-border" aria-live="polite">
+    <div className="px-4 py-3 border-b border-glass-border">
       <div className="flex items-center gap-2 mb-2.5">
         <Brain className="w-3.5 h-3.5 text-accent" />
         <p className="text-label">AI REASONING</p>
@@ -91,7 +94,8 @@ function ThinkingFeed({ osm_id }: { osm_id: string }) {
   );
 }
 
-function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
+// ─── Pre-analysis view ───────────────────────────────────────────────────────
+function BridgePreAnalysis({ bridge }) {
   const { analyzeOneBridge } = useBridgeAnalyze();
   const analyzingBridgeIds = useAppStore((s) => s.analyzingBridgeIds);
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
@@ -99,6 +103,7 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
 
   return (
     <motion.div {...slidePanel} className="flex flex-col h-full">
+      {/* Header */}
       <div className="flex items-start justify-between px-4 py-3 border-b border-glass-border flex-shrink-0">
         <div className="flex-1 mr-2">
           <p className="font-medium text-sm text-white leading-snug">
@@ -112,33 +117,35 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
           onClick={() => setSelectedBridgeId(null)}
           className="text-dim hover:text-white transition-colors p-1 rounded hover:bg-surface-2"
           title="Back to list"
-          aria-label="Close bridge details"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
+      {/* Metadata */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-4 border-b border-glass-border grid grid-cols-2 gap-x-6 gap-y-3">
-          <MetaItem label="ROAD CLASS" value={ROAD_LABELS[(bridge as any).road_class] || (bridge as any).road_class} />
-          <MetaItem label="PRIORITY" value={`${(bridge as any).priority_score || 0} / 6.5`} />
-          <MetaItem label="BUILT" value={(bridge as any).construction_year} />
-          {(bridge as any).material && (bridge as any).material !== "unknown" && (
-            <MetaItem label="MATERIAL" value={(bridge as any).material} />
+          <MetaItem label="ROAD CLASS" value={ROAD_LABELS[bridge.road_class] || bridge.road_class} />
+          <MetaItem label="PRIORITY" value={`${bridge.priority_score} / 6.5`} />
+          <MetaItem label="BUILT" value={bridge.construction_year} />
+          {bridge.material && bridge.material !== "unknown" && (
+            <MetaItem label="MATERIAL" value={bridge.material} />
           )}
-          {(bridge as any).max_weight_tons && (
-            <MetaItem label="MAX WEIGHT" value={`${(bridge as any).max_weight_tons} t`} />
+          {bridge.max_weight_tons && (
+            <MetaItem label="MAX WEIGHT" value={`${bridge.max_weight_tons} t`} />
           )}
         </div>
 
+        {/* Analysis description */}
         <div className="px-4 py-4 border-b border-glass-border">
           <p className="text-label mb-2.5">DEEP ANALYSIS INCLUDES</p>
           <ul className="space-y-2">
             {[
-              "Street View imagery at 3 angles (N/E/W)",
-              "AI defect detection with bounding boxes",
-              "Historical context & construction era",
-              "Risk score + engineering report",
+              "Street View imagery at 6 angles with 12 defect categories",
+              "Scour & foundation risk assessment (Criterion #1)",
+              "Structural type classification & redundancy analysis",
+              "Physics-based degradation modeling (Fick's law, ISO 9223)",
+              "11-criterion Physics Health Certificate with confidence bounds",
             ].map((item) => (
               <li key={item} className="text-xs text-muted flex gap-2">
                 <ChevronRight className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
@@ -148,6 +155,7 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
           </ul>
         </div>
 
+        {/* Analyse button */}
         <div className="px-4 py-5">
           <button
             onClick={() => analyzeOneBridge(bridge)}
@@ -157,7 +165,6 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
                 ? "bg-surface-2 text-dim cursor-not-allowed"
                 : "glass-button-accent hover:shadow-glow-cyan"
             }`}
-            aria-label="Run deep analysis"
           >
             {isAnalyzing ? (
               <span className="flex items-center justify-center gap-2">
@@ -173,6 +180,7 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
           </p>
         </div>
 
+        {/* Live thinking feed during analysis */}
         <AnimatePresence>
           {isAnalyzing && <ThinkingFeed osm_id={bridge.osm_id} />}
         </AnimatePresence>
@@ -181,13 +189,15 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
   );
 }
 
-function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: BridgeRiskReport }) {
+// ─── Post-analysis report ────────────────────────────────────────────────────
+function BridgeReport({ bridge, report }) {
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
 
   const tierColor = RISK_COLORS[report.risk_tier] || RISK_COLORS.OK;
 
   return (
     <motion.div {...slidePanel} className="flex flex-col h-full">
+      {/* Header */}
       <div className="flex items-start justify-between px-4 py-3 border-b border-glass-border flex-shrink-0">
         <div className="flex-1 mr-2">
           <p className="font-medium text-sm text-white leading-snug">
@@ -198,48 +208,52 @@ function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: Bridg
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <RiskBadge tier={report.risk_tier} score={(report as any).risk_score} />
+          <RiskBadge tier={report.risk_tier} score={report.risk_score} />
           <button
             onClick={() => setSelectedBridgeId(null)}
             className="text-dim hover:text-white transition-colors p-1 rounded hover:bg-surface-2"
-            aria-label="Close report"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
+      {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto">
+        {/* Street View */}
         <div className="border-b border-glass-border">
           <BridgeImageViewer bridge={{ ...report, bridge_id: bridge.osm_id }} />
         </div>
 
-        {(report as any).context && (
+        {/* Context metadata */}
+        {report.context && (
           <div className="px-4 py-3 border-b border-glass-border grid grid-cols-2 gap-x-6 gap-y-2">
-            <MetaItem label="BUILT" value={(report as any).context.construction_year} />
-            {(report as any).context.material !== "unknown" && (
-              <MetaItem label="MATERIAL" value={(report as any).context.material} />
+            <MetaItem label="BUILT" value={report.context.construction_year} />
+            {report.context.material !== "unknown" && (
+              <MetaItem label="MATERIAL" value={report.context.material} />
             )}
-            {(report as any).context.construction_era !== "Unknown" && (
-              <MetaItem label="ERA" value={(report as any).context.construction_era} />
+            {report.context.construction_era !== "Unknown" && (
+              <MetaItem label="ERA" value={report.context.construction_era} />
             )}
-            <MetaItem label="AGE" value={(report as any).context.age_years ? `${(report as any).context.age_years} years` : null} />
-            <MetaItem label="SIGNIFICANCE" value={(report as any).context.structural_significance} />
+            <MetaItem label="AGE" value={report.context.age_years ? `${report.context.age_years} years` : null} />
+            <MetaItem label="SIGNIFICANCE" value={report.context.structural_significance} />
           </div>
         )}
 
-        {(report as any).condition_summary && (
+        {/* Condition summary */}
+        {report.condition_summary && (
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-label mb-1.5">CONDITION SUMMARY</p>
-            <p className="text-xs text-muted leading-relaxed">{(report as any).condition_summary}</p>
+            <p className="text-xs text-muted leading-relaxed">{report.condition_summary}</p>
           </div>
         )}
 
-        {(report as any).key_risk_factors?.length > 0 && (
+        {/* Risk factors */}
+        {report.key_risk_factors?.length > 0 && (
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-label mb-1.5">KEY RISK FACTORS</p>
             <ul className="space-y-1.5">
-              {(report as any).key_risk_factors.map((f: string, i: number) => (
+              {report.key_risk_factors.map((f, i) => (
                 <li key={i} className="text-xs text-muted flex gap-1.5">
                   <ChevronRight className="w-3 h-3 text-severity-critical flex-shrink-0 mt-0.5" />
                   {f}
@@ -249,23 +263,25 @@ function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: Bridg
           </div>
         )}
 
-        {(report as any).recommended_action && (
+        {/* Recommended action */}
+        {report.recommended_action && (
           <div
             className="px-4 py-3 border-b border-glass-border"
             style={{ backgroundColor: tierColor.bg }}
           >
             <p className="text-label mb-1">RECOMMENDED ACTION</p>
             <p className="text-xs font-semibold" style={{ color: tierColor.text }}>
-              {(report as any).recommended_action}
+              {report.recommended_action}
             </p>
           </div>
         )}
 
-        {(report as any).maintenance_notes?.length > 0 && (
+        {/* Maintenance notes */}
+        {report.maintenance_notes?.length > 0 && (
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-label mb-1.5">MAINTENANCE TASKS</p>
             <ul className="space-y-1.5">
-              {(report as any).maintenance_notes.map((n: string, i: number) => (
+              {report.maintenance_notes.map((n, i) => (
                 <li key={i} className="text-xs text-muted flex gap-1.5">
                   <span className="text-dim flex-shrink-0">-</span>
                   {n}
@@ -275,14 +291,23 @@ function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: Bridg
           </div>
         )}
 
-        {(report as any).confidence_caveat && (
+        {/* Confidence caveat */}
+        {report.confidence_caveat && (
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-2xs text-dim italic leading-relaxed">
-              {(report as any).confidence_caveat}
+              {report.confidence_caveat}
             </p>
           </div>
         )}
 
+        {/* Physics Health Certificate (11-criteria breakdown) */}
+        {report.certificate && (
+          <div className="px-4 py-3 border-b border-glass-border">
+            <PhysicsCertificateView certificate={report.certificate} />
+          </div>
+        )}
+
+        {/* Export */}
         <div className="px-4 py-4">
           <ReportExport bridge={report} />
         </div>
@@ -291,6 +316,7 @@ function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: Bridg
   );
 }
 
+// ─── Empty state ─────────────────────────────────────────────────────────────
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-4">
@@ -310,25 +336,27 @@ function EmptyState() {
   );
 }
 
-function StepIcon({ status }: { status: string }) {
+// ─── Step icon ───────────────────────────────────────────────────────────────
+function StepIcon({ status }) {
   if (status === "ok") return <CheckCircle className="w-3.5 h-3.5 text-severity-ok flex-shrink-0" />;
   if (status === "failed") return <XCircle className="w-3.5 h-3.5 text-severity-critical flex-shrink-0" />;
   if (status === "trying") return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0" />;
   return <Circle className="w-3 h-3 text-dim flex-shrink-0" />;
 }
 
-function messageColor(status: string) {
+function messageColor(status) {
   if (status === "ok") return "text-severity-ok";
   if (status === "failed") return "text-severity-critical";
   if (status === "trying") return "text-accent";
   return "text-dim";
 }
 
+// ─── Loading state ───────────────────────────────────────────────────────────
 function LoadingState() {
   const scanProgress = useAppStore((s) => s.scanProgress);
 
   return (
-    <div className="flex flex-col h-full" aria-live="polite">
+    <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-4 border-b border-glass-border flex-shrink-0">
         <Loader2 className="w-5 h-5 text-accent animate-spin flex-shrink-0" />
         <p className="text-sm font-mono font-bold text-accent tracking-wider">DISCOVERING</p>
@@ -357,6 +385,7 @@ function LoadingState() {
   );
 }
 
+// ─── Main side panel ─────────────────────────────────────────────────────────
 export default function BridgePanel() {
   const selectedBridgeId = useAppStore((s) => s.selectedBridgeId);
   const bridges = useAppStore((s) => s.bridges);

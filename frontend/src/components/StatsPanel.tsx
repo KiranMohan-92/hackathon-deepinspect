@@ -17,13 +17,15 @@ interface StatCardProps {
 
 function StatCard({ icon: Icon, label, value, accent = false }: StatCardProps) {
   return (
-    <div className="glass-panel p-3 flex items-center gap-3">
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ? "bg-accent/10" : "bg-surface-2"}`}>
-        <Icon className={`w-4 h-4 ${accent ? "text-accent" : "text-dim"}`} />
+    <div className="glass-panel p-3 flex items-center gap-2.5 min-w-0">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${accent ? "bg-accent/10" : "bg-surface-2"}`}>
+        <Icon className={`w-3.5 h-3.5 ${accent ? "text-accent" : "text-dim"}`} />
       </div>
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-label">{label}</p>
-        <p className="text-lg font-mono font-bold text-white">{value}</p>
+        <p className="text-sm font-mono font-bold text-white truncate" title={String(value)}>
+          {value}
+        </p>
       </div>
     </div>
   );
