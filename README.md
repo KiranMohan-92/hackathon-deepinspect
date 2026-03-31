@@ -1,19 +1,19 @@
 # DeepInspect
 
-AI-powered bridge risk assessment for Poland. Scan any city or map area to discover motor-vehicle bridges ranked by structural priority, then deep-analyse individual bridges with Gemini vision and Street View imagery — no field inspection required.
+**Physics-first AI bridge health inspection platform.** Scan any city or map area to discover motor-vehicle bridges, then run a full 11-criteria structural assessment powered by a multi-agent AI swarm — no field visit required.
+
+DeepInspect evaluates bridges against the same ranked criteria that govern real-world collapse: scour/foundations (#1, 52-55% of failures), load-path redundancy (#2), capacity vs. demand (#3), and 8 more — producing a traceable **Physics Health Certificate** with per-criterion scores, confidence bounds, and explicit field-inspection flags where remote assessment reaches its limits.
 
 ---
 
-## Production-Grade Features
+## What Makes This Different
 
-This version includes enterprise-grade enhancements:
-
-- **Security**: Rate limiting, API key authentication, security headers, error sanitization
-- **TypeScript**: Full frontend migration with strict typing
-- **Testing**: 80+ backend tests, 32 E2E Playwright tests
-- **API v1**: Versioned REST API with backward compatibility
-- **Docker**: Multi-stage builds, hardened compose, CI/CD workflows
-- **Observability**: Structured JSON audit logging, metrics endpoint
+| Traditional inspection tools | DeepInspect |
+|------------------------------|-------------|
+| Single risk score, opaque formula | 11 ranked criteria, physics-derived weights, every score traceable to data sources |
+| Visual defects only | Scour risk, structural redundancy, load capacity, degradation modeling (Fick's law, ISO 9223) |
+| Binary pass/fail | Confidence bounds on every criterion + explicit "REQUIRES FIELD INSPECTION" flags |
+| Static PDF checklist | Interactive radar chart, expandable criterion cards, NASA-quality PDF export |
 
 ---
 
@@ -26,10 +26,11 @@ This version includes enterprise-grade enhancements:
 5. [Run with Docker](#5-run-with-docker)
 6. [Testing](#6-testing)
 7. [Using the App](#7-using-the-app)
-8. [API Reference](#8-api-reference)
-9. [How It Works](#9-how-it-works)
-10. [Project Structure](#10-project-structure)
-11. [Troubleshooting](#11-troubleshooting)
+8. [The 11-Criteria Physics Assessment](#8-the-11-criteria-physics-assessment)
+9. [Agent Architecture](#9-agent-architecture)
+10. [API Reference](#10-api-reference)
+11. [Project Structure](#11-project-structure)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -53,7 +54,7 @@ You need two API keys.
 ### Gemini API key
 
 1. Go to [aistudio.google.com](https://aistudio.google.com)
-2. Click **Get API key** → **Create API key**
+2. Click **Get API key** > **Create API key**
 3. Copy the key
 
 ### Google Maps API key
@@ -61,8 +62,8 @@ You need two API keys.
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Enable these two APIs:
    - **Street View Static API** — bridge imagery
-   - **Geocoding API** — city name → coordinates (used as fallback; primary geocoding uses free OSM Nominatim)
-3. Go to **Credentials** → **Create API Key**
+   - **Geocoding API** — city name to coordinates (fallback; primary geocoding uses free OSM Nominatim)
+3. Go to **Credentials** > **Create API Key**
 4. Copy the key
 
 > **Note:** The map itself uses OpenStreetMap (free, no key needed). You do **not** need the Maps JavaScript API.
@@ -74,7 +75,7 @@ You need two API keys.
 ### Backend environment file
 
 ```bash
-cd deepinspect/backend
+cd backend
 cp .env.example .env
 ```
 
@@ -86,16 +87,13 @@ GOOGLE_MAPS_API_KEY=your_google_maps_key_here
 REDIS_URL=redis://localhost:6379
 DEMO_MODE=true
 MAX_BRIDGES_PER_SCAN=500
-STREETVIEW_CACHE_DIR=./data/demo_cache/images
 GEMINI_MODEL=gemini-2.0-flash
-ENVIRONMENT=development
-API_KEYS=your-secret-api-key-for-production
 ```
 
 ### Frontend environment file
 
 ```bash
-cd deepinspect/frontend
+cd frontend
 cp .env.example .env
 ```
 
@@ -104,8 +102,6 @@ Open `frontend/.env`:
 ```env
 VITE_API_BASE_URL=http://localhost:8000
 ```
-
-The frontend no longer needs a Maps API key — the map runs on OpenStreetMap via Leaflet.
 
 ---
 
@@ -116,26 +112,21 @@ Open **two terminals**.
 ### Terminal 1 — Backend
 
 ```bash
-cd deepinspect/backend
-
-python -m venv venv
-
-source venv/bin/activate        # macOS / Linux
-venv\Scripts\activate           # Windows
+cd backend
+python -m venv .venv
+source .venv/bin/activate        # macOS / Linux
+# .venv\Scripts\activate         # Windows
 
 pip install -r requirements.txt
-
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Verify: [http://localhost:8000/health](http://localhost:8000/health) → `{"status":"ok"}`
-
-Interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+Verify: [http://localhost:8000/health](http://localhost:8000/health)
 
 ### Terminal 2 — Frontend
 
 ```bash
-cd deepinspect/frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -147,26 +138,14 @@ Open [http://localhost:5173](http://localhost:5173).
 ## 5. Run with Docker
 
 ```bash
-cd deepinspect
-
 # Make sure backend/.env is filled in first
 docker-compose up --build
 ```
 
 Services:
-- Frontend → [http://localhost:5173](http://localhost:5173)
-- Backend  → [http://localhost:8000](http://localhost:8000)
-- Redis    → `localhost:6379` (optional cache, used automatically)
-
-```bash
-docker-compose down
-```
-
-### Production Deployment
-
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up --build
-```
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend: [http://localhost:8000](http://localhost:8000)
+- Redis: `localhost:6379` (optional cache)
 
 ---
 
@@ -179,11 +158,6 @@ cd backend
 python -m pytest tests/ -v
 ```
 
-**80 tests** covering:
-- Unit tests (models, scoring, discovery)
-- API endpoint tests
-- Security tests (rate limiting, API key auth, sanitization)
-
 ### E2E Tests
 
 ```bash
@@ -192,329 +166,257 @@ npm install
 npx playwright test
 ```
 
-**32 E2E tests** covering:
-- Scan flow
-- Analysis flow
-- Export functionality
-- Image upload
-- Accessibility
-
 ---
 
 ## 7. Using the App
 
 ### Two-phase workflow
 
-DeepInspect uses a two-phase approach that separates fast discovery from slow analysis:
-
 **Phase 1 — Discover (instant)**
-Enter a city name or use "Scan this area" on the map. The backend queries OpenStreetMap for all motor-vehicle bridges (motorway, trunk, primary, secondary, tertiary, residential) and returns them sorted by structural priority. A city like Warsaw returns ~200–400 bridges in seconds — no Gemini calls, no images.
+Enter a city name or use "Scan this area" on the map. The backend queries OpenStreetMap for all motor-vehicle bridges and returns them sorted by structural priority. A city like Warsaw returns 200-400 bridges in seconds — no AI calls, no images.
 
-**Phase 2 — Analyse (per bridge, ~15–30 seconds)**
-Click any bridge on the map or in the list to open the detail panel. Click **Run Deep Analysis** to trigger the full AI pipeline for that specific bridge: Street View imagery is fetched at 3 angles, Gemini vision detects defects and draws bounding boxes, construction history is researched, and a risk score + engineering report is generated.
+**Phase 2 — Analyse (per bridge, ~30-60 seconds)**
+Click any bridge, then **Run Deep Analysis**. The 7-agent swarm runs:
+1. Street View imagery at 6 angles with 14 defect categories
+2. Scour and foundation risk assessment
+3. Structural type classification and redundancy analysis
+4. Physics-based degradation modeling
+5. Full 11-criterion Physics Health Certificate
 
-### Search modes
+### Map markers
 
-| Mode | Input example | What it does |
-|------|--------------|--------------|
-| **City** | `Warsaw`, `Kraków` | Discovers all motor-vehicle bridges in the city |
-| **Bridge name** | `Most Grunwaldzki` | Searches for a named bridge |
-| **Coordinates** | `51.1079, 17.0385` | Finds bridges within ~2 km of the point |
-
-### Scan this area
-
-Zoom and pan the map to any area of interest, then click **Scan this area** (bottom-right of map). This scans only the bridges visible in the current viewport — no geocoding needed.
-
-### Map
-
-- **Gray dots** — discovered but not yet analysed. Dot size reflects road class priority (motorway > trunk > primary …)
+- **Gray dots** — discovered but not yet analysed
 - **Coloured dots** — analysed bridges, colour-coded by risk tier:
-  - Red (pulsing) = CRITICAL
-  - Orange (pulsing) = HIGH
-  - Amber = MEDIUM
-  - Green = OK
-- Hover any marker for a quick preview card
-- Click a marker to open the detail panel
+  - Red (pulsing) = CRITICAL (4.0-5.0)
+  - Orange (pulsing) = HIGH (3.0-3.9)
+  - Amber = MEDIUM (2.0-2.9)
+  - Green = OK (1.0-1.9)
 
-### Bridge detail panel
+### After analysis
 
-**Before analysis:** shows road class, priority score, construction year and material (if known in OSM), plus the **Run Deep Analysis** button.
-
-**After analysis:** shows the full report:
-- Risk tier and score (1.0–5.0)
-- Street View images at N/E/W angles with AI defect bounding boxes overlaid
-- Construction era, material, age
-- Condition summary, key risk factors, recommended action
-- Maintenance task list
-- Confidence caveats
-- **Download PDF Report** button
-
-### Filter bar
-
-Click **CRITICAL / HIGH / MEDIUM / OK / ALL** above the map to show only bridges of that risk tier. Filters apply only to analysed bridges — unanalysed bridges are always shown in ALL mode.
-
-### Upload image
-
-Click **Upload bridge image** to analyse your own photo directly — no bridge discovery needed. Gemini returns defect scores for all 6 categories with bounding boxes overlaid on your image.
+The bridge detail panel shows:
+- **Risk badge** with tier, score, and confidence level
+- **Street View images** with AI defect bounding boxes overlaid
+- **Construction context** — era, material, age, significance
+- **Condition summary** and key risk factors
+- **Physics Health Certificate** — 11-criteria radar chart, expandable criterion cards, field inspection flags
+- **Download PDF Report** — multi-page engineering report
 
 ---
 
-## 8. API Reference
+## 8. The 11-Criteria Physics Assessment
+
+DeepInspect evaluates every bridge against 11 ranked inspection criteria derived from equilibrium physics and global bridge collapse statistics. The ranking is hard to vary — change the order and you contradict either Newton's laws or the statistical record.
+
+| Rank | Criterion | Weight | Why this rank |
+|------|-----------|--------|---------------|
+| 1 | Scour / Foundations / Channel Stability | 25% | 52-55% of all bridge collapses. Scour removes soil support, violating vertical equilibrium. |
+| 2 | Load-Path Redundancy (NSTM) | 15% | Non-redundant tension members: local failure = total collapse. |
+| 3 | Capacity vs. Demand | 12% | Overload causes ~11% of failures. Rating factor < 1.0 means legal loads exceed margin. |
+| 4 | Substructure Integrity | 10% | Piers, abutments, pile caps transfer ALL loads to foundations. |
+| 5 | Superstructure Elements | 10% | Girders, trusses, cables — fatigue cracks and section loss. |
+| 6 | Overall Stability | 5% | Buckling, overturning — usually a consequence of #1-5, not an initiator. |
+| 7 | Durability / Degradation | 8% | Corrosion, freeze-thaw, ASR — slow onset but cumulative. |
+| 8 | Bearings / Joints | 5% | Failed seals accelerate degradation of higher-ranked components. |
+| 9 | Deck / Slab | 4% | First line of defense against water intrusion. Indirect structural impact. |
+| 10 | Stiffness / Serviceability | 3% | Leading indicator (deflections, vibrations), rarely causes collapse alone. |
+| 11 | Ancillary Systems | 3% | Railings, drainage, coatings — lowest direct structural impact. |
+
+**Weights sum to 1.0.** Scores are confidence-adjusted with pessimistic bias: low confidence on a high-impact criterion increases the effective risk score, because "I don't know" should not mean "it's fine."
+
+### Physics Health Certificate
+
+The final output is a `PhysicsHealthCertificate` containing:
+- Overall weighted risk score (1.0-5.0) and tier
+- Per-criterion scores with confidence levels (high/medium/low)
+- Data sources used for each criterion
+- Key findings and failure-mode probability
+- Explicit field-inspection flags with specific scope (e.g., "Underwater sonar for pier scour depth")
+- Estimated remaining service life (from degradation modeling)
+- Assessment limitations (what remote assessment cannot verify)
+
+### What this system does NOT claim
+
+1. Remote visual analysis cannot detect subsurface defects
+2. Scour depth below waterline requires bathymetric survey — we estimate risk, not depth
+3. Load rating precision requires structural drawings — we provide capacity class, not rating factors
+4. Material properties are inferred from era/type, not tested
+5. Street View imagery is point-in-time and may be years old
+
+**These limitations are stated in every certificate.** A system that claims certainty where physics demands measurement is more dangerous than one that says "send an engineer."
+
+---
+
+## 9. Agent Architecture
+
+DeepInspect uses a hierarchical agentic swarm — 7 specialized agents orchestrated in a parallel/sequential execution graph:
+
+```
+DiscoveryAgent ──> bridge found
+                      |
+              +-------+-------------------+
+              v       v                   v
+    HydrologicalAgent VisionAgent(14cat) ContextAgent
+              |       |                   |
+              +---+---+                   |
+                  v                       |
+         StructuralTypeAgent <------------+
+         (needs vision + context)
+                  |
+                  v
+         DegradationAgent
+         (needs context + vision)
+                  |
+                  v
+         RiskFusionAgent
+         (all criterion scores -> weighted fusion)
+         -> PhysicsHealthCertificate
+```
+
+### Agent details
+
+| Agent | Criterion | Data sources | Output |
+|-------|-----------|-------------|--------|
+| **DiscoveryAgent** | — | OSM Overpass, Google Places (fallback) | `list[BridgeSummary]` with priority scores |
+| **HydrologicalAgent** | #1 Scour | OSM waterway tags, flood risk classification, Gemini Vision (exposed foundations, erosion) | `ScourAssessment` |
+| **VisionAgent** | #4,5,8,9,11 | Street View at 6 headings, Gemini Vision | `VisualAssessment` with 14 defect categories |
+| **ContextAgent** | — | Gemini text model, Polish infrastructure knowledge | `BridgeContext` (era, material, incidents, traffic) |
+| **StructuralTypeAgent** | #2,3,6 | Gemini Vision (structure classification), OSM tags, redundancy lookup table | `StructuralTypeAssessment` |
+| **DegradationAgent** | #7 | Fick's 2nd law (chloride ingress), ISO 9223 (corrosion rates), freeze-thaw cycles | `DegradationAssessment` |
+| **RiskAgent** | All 11 | All sub-assessments, Gemini narrative | `BridgeRiskReport` + `PhysicsHealthCertificate` |
+
+### Graceful degradation
+
+If any agent fails, the pipeline continues — the criterion gets scored with lower confidence and a field-inspection flag, not skipped entirely. The system always produces a report.
+
+---
+
+## 10. API Reference
 
 Base URL: `http://localhost:8000`
 
 ### Health Check
 
-```bash
+```
 GET /health
-GET /api/v1/health
 ```
 
-```json
-{"status": "ok", "version": "1.0.0", "environment": "development", "dependencies": {...}}
+### Bridge Discovery (SSE stream)
+
+```
+POST /api/scan
+Content-Type: application/json
+
+{"query": "Warsaw", "query_type": "city_scan", "max_bridges": 500}
 ```
 
-### Metrics
+### Bridge Analysis (SSE stream)
 
-```bash
-GET /api/v1/metrics
+```
+POST /api/bridges/{osm_id}/analyze
+Content-Type: application/json
+
+{bridge summary object}
 ```
 
-Returns request counters and audit log count.
-
-### Bridge Discovery
-
-```bash
-POST /api/v1/scan
-```
-
-Fast bridge discovery. Returns all motor-vehicle bridges sorted by priority score. **No Gemini calls** — completes in seconds.
-
-**Request body:**
-```json
-{
-  "query": "Warsaw",
-  "query_type": "city_scan",
-  "max_bridges": 500
-}
-```
-
-`query_type` values:
-- `city_scan` — city name
-- `bridge_lookup` — bridge name
-- `coordinate_query` — `"lat, lon"` string
-- `bbox` — viewport bounds (requires `bbox` field)
-
-For viewport scans, include the `bbox` field:
-```json
-{
-  "query": "viewport",
-  "query_type": "bbox",
-  "max_bridges": 200,
-  "bbox": {
-    "sw_lat": 52.20, "sw_lon": 20.95,
-    "ne_lat": 52.25, "ne_lon": 21.05
-  }
-}
-```
-
-### Bridge Analysis
-
-```bash
-POST /api/v1/bridges/{osm_id}/analyze
-```
-
-Deep analysis for a single bridge. Runs Vision + Context + Risk agents (~15–30 seconds).
-
-### Demo Data
-
-```bash
-GET /api/v1/demo
-```
-
-Returns pre-cached Wrocław scan results.
-
-### Image Analysis
-
-```bash
-POST /api/v1/analyze-image
-```
-
-Analyse an uploaded image file.
-
-```bash
-curl -X POST http://localhost:8000/api/v1/analyze-image \
-  -H "X-API-Key: your-secret-api-key" \
-  -F "file=@/path/to/bridge.jpg"
-```
+Returns SSE events: `thinking_step` (per-agent reasoning), `complete` (full report with certificate), `error`.
 
 ### Street View Images
 
-```bash
-GET /api/v1/images/{osm_id}/{heading}
+```
+GET /api/images/{osm_id}/{heading}
 ```
 
-Serve a cached Street View image for a bridge. `heading` is `0` (N), `60`, `120`, `180`, `240`, or `300`.
+Headings: `0` (N), `60`, `120`, `180`, `240`, `300`.
+
+### Image Upload Analysis
+
+```
+POST /api/analyze-image
+Content-Type: multipart/form-data
+```
 
 ---
 
-## 9. How It Works
-
-### Bridge discovery and prioritisation
-
-The Overpass query fetches only `highway`-tagged bridges (motorway, trunk, primary, secondary, tertiary, residential) — filtering out footbridges, cycleways, railway bridges, and culverts. This typically reduces a city's OSM bridge count from thousands to a few hundred meaningful road bridges.
-
-Each bridge is assigned a **priority score** (1.0–6.5) based on:
-- Road class (motorway = 5.0, residential = 0.8)
-- Named bridge bonus (+0.5 — named bridges tend to be significant)
-- Age bonus (+0.5–1.0 for bridges over 40 or 60 years old)
-
-Bridges are sorted by priority score descending so the most important infrastructure appears first.
-
-### Deep analysis pipeline (per bridge)
-
-When the user clicks **Run Deep Analysis**, four agents run in sequence:
-
-| Stage | Agent | What it does |
-|-------|-------|-------------|
-| 1 | Vision | Fetches Street View at 3 headings (N/E/W), sends to Gemini vision; returns defect scores (1–5) for 6 categories + bounding boxes |
-| 2 | Context | Queries Gemini text model for construction history, era, material, past incidents |
-| 3 | Risk | Fuses visual score + age + incidents + inspection staleness into a single score; calls Gemini for an engineering narrative report |
-
-Vision and Context run in parallel; Risk runs after both complete.
-
-### Risk scoring formula
-
-| Factor | Weight | Source |
-|--------|--------|--------|
-| Visual condition | 40% | Gemini vision — average of 6 defect category scores |
-| Bridge age | 25% | OSM `start_date` or Gemini-estimated year |
-| Incident history | 20% | Count of known past incidents |
-| Inspection staleness | 15% | Years since last recorded inspection |
-
-Score range: **1.0 (best) → 5.0 (worst)**
-
-### Risk tiers
-
-| Tier | Score | Marker | Recommended action |
-|------|-------|--------|--------------------|
-| CRITICAL | 4.0–5.0 | Red pulsing | Immediate closure and emergency inspection |
-| HIGH | 3.0–3.9 | Orange pulsing | Priority inspection within 30 days |
-| MEDIUM | 2.0–2.9 | Amber | Schedule inspection within 6 months |
-| OK | 1.0–1.9 | Green | Routine monitoring — next standard cycle |
-
----
-
-## 10. Project Structure
+## 11. Project Structure
 
 ```
 deepinspect/
-├── backend/
-│   ├── main.py                    # FastAPI entry point
-│   ├── config.py                  # Settings from .env
-│   ├── api/
-│   │   └── v1/
-│   │       └── router.py          # API v1 endpoints
-│   ├── agents/
-│   │   ├── orchestrator.py        # run_single_analysis() + run_pipeline()
-│   │   ├── discovery_agent.py     # Overpass query → priority-scored bridges
-│   │   ├── vision_agent.py        # Street View fetch + Gemini vision
-│   │   ├── context_agent.py       # Gemini text → construction history
-│   │   └── risk_agent.py          # Score fusion + narrative report
-│   ├── models/
-│   │   └── bridge.py              # Pydantic models
-│   ├── services/
-│   │   ├── gemini_service.py      # Gemini model instances
-│   │   ├── overpass_service.py    # OSM Overpass query
-│   │   ├── maps_service.py        # Nominatim geocoding
-│   │   └── streetview_service.py  # Street View fetch + cache
-│   ├── utils/
-│   │   ├── scoring.py             # Risk score formula
-│   │   ├── errors.py              # Custom error classes
-│   │   ├── security.py            # Security middleware
-│   │   └── audit.py               # Audit logging
-│   ├── prompts/
-│   │   ├── vision_prompt.txt
-│   │   ├── context_prompt.txt
-│   │   └── risk_report_prompt.txt
-│   ├── tests/                     # 80+ pytest tests
-│   │   ├── unit/
-│   │   └── api/
-│   ├── data/demo_cache/           # Pre-computed results
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx                # Root component (TypeScript)
-│   │   ├── types.ts              # TypeScript interfaces
-│   │   ├── components/
-│   │   │   ├── MapView.tsx       # Leaflet map
-│   │   │   ├── SearchBar.tsx      # Query input
-│   │   │   ├── BridgePanel.tsx    # Detail panel
-│   │   │   ├── BridgeList.tsx     # Bridge list
-│   │   │   ├── BridgeImageViewer.tsx
-│   │   │   ├── ImageAnalysisModal.tsx
-│   │   │   ├── RiskBadge.tsx
-│   │   │   ├── ReportExport.tsx   # PDF/CSV/JSON export
-│   │   │   ├── StatsPanel.tsx
-│   │   │   ├── CommandHeader.tsx
-│   │   │   ├── ErrorBoundary.tsx # React error boundary
-│   │   │   └── charts/
-│   │   ├── store/
-│   │   │   └── useAppStore.ts    # Zustand state (TypeScript)
-│   │   ├── hooks/
-│   │   │   ├── useBridgeScan.ts
-│   │   │   ├── useBridgeAnalyze.ts
-│   │   │   ├── useHealthCheck.ts
-│   │   │   └── ...
-│   │   └── utils/
-│   ├── tsconfig.json              # TypeScript config
-│   ├── vite.config.ts             # Vite bundler
-│   ├── tailwind.config.js
-│   ├── package.json
-│   └── Dockerfile
-├── tests-e2e/                     # 32 Playwright E2E tests
-│   ├── playwright.config.ts
-│   └── tests/e2e/
-├── scripts/
-│   └── precompute_demo.py
-├── .github/
-│   └── workflows/
-│       ├── ci.yml                # CI pipeline
-│       └── deploy.yml             # CD pipeline
-├── docker-compose.yml
-├── docker-compose.override.yml    # Development overrides
-├── docker-compose.prod.yml        # Production config
-├── .dockerignore
-└── README.md
++-- backend/
+|   +-- main.py                          # FastAPI entry point
+|   +-- config.py                        # Settings from .env
+|   +-- agents/
+|   |   +-- orchestrator.py              # 7-agent execution graph
+|   |   +-- discovery_agent.py           # OSM Overpass -> priority-scored bridges
+|   |   +-- vision_agent.py              # Street View + Gemini Vision (14 categories)
+|   |   +-- context_agent.py             # Gemini text -> construction history
+|   |   +-- risk_agent.py                # Score fusion + PhysicsHealthCertificate
+|   |   +-- hydrological_agent.py        # Scour / flood risk assessment
+|   |   +-- structural_type_agent.py     # Redundancy + capacity classification
+|   |   +-- degradation_agent.py         # Fick's law + ISO 9223 + freeze-thaw
+|   +-- models/
+|   |   +-- bridge.py                    # BridgeTarget, BridgeSummary, BridgeRiskReport
+|   |   +-- vision.py                    # VisualAssessment (14 defect categories)
+|   |   +-- context.py                   # BridgeContext
+|   |   +-- criteria.py                  # CriterionResult, PhysicsHealthCertificate
+|   |   +-- scour.py                     # ScourAssessment
+|   |   +-- structural_type.py           # StructuralTypeAssessment
+|   |   +-- degradation.py              # DegradationAssessment
+|   +-- services/
+|   |   +-- gemini_service.py            # Gemini model instances
+|   |   +-- overpass_service.py          # OSM Overpass query
+|   |   +-- streetview_service.py        # Street View fetch + disk cache
+|   |   +-- maps_service.py             # Nominatim geocoding
+|   |   +-- flood_service.py            # Waterway proximity + flood risk
+|   +-- utils/
+|   |   +-- scoring.py                   # 11-criterion physics-weighted fusion
+|   +-- prompts/
+|   |   +-- vision_prompt.txt            # 14-category defect analysis
+|   |   +-- context_prompt.txt           # Polish infrastructure research
+|   |   +-- risk_report_prompt.txt       # Risk narrative synthesis
+|   |   +-- scour_vision_prompt.txt      # Scour indicator detection
+|   |   +-- structural_type_prompt.txt   # Structure classification
+|   |   +-- degradation_prompt.txt       # Degradation reasoning
+|   +-- requirements.txt
+|   +-- .env.example
++-- frontend/
+|   +-- src/
+|   |   +-- components/
+|   |   |   +-- BridgePanel.jsx          # Detail panel + PhysicsCertificateView
+|   |   |   +-- PhysicsCertificateView.jsx  # Certificate display
+|   |   |   +-- CriterionCard.jsx        # Per-criterion expandable card
+|   |   |   +-- ReportExport.jsx         # Multi-page PDF export
+|   |   |   +-- charts/
+|   |   |   |   +-- CriteriaRadarChart.jsx  # 11-axis risk profile
+|   |   |   |   +-- DefectFrequencyChart.jsx
+|   |   |   |   +-- RiskDistributionChart.jsx
+|   |   +-- store/useAppStore.js         # Zustand state
+|   |   +-- hooks/                       # SSE streaming, health check
+|   +-- tailwind.config.js
+|   +-- package.json
++-- DESIGN.md                            # Design system specification
++-- docker-compose.yml
++-- README.md
 ```
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 **Backend returns 500 on `/api/scan`**
-→ Check the terminal for a specific error. Common causes: invalid API key, Overpass API unreachable (try again in a minute), or a Gemini model name that doesn't exist in your API tier.
+Check the terminal for a specific error. Common causes: invalid API key, Overpass API unreachable (try again in a minute).
 
 **"No bridges found" for a city**
-→ The Overpass query filters to motor-vehicle bridges only. Some smaller towns have few or no OSM-tagged highway bridges. Try a larger city: `Warsaw`, `Kraków`, `Wrocław`, `Gdańsk`.
+The Overpass query filters to motor-vehicle bridges only. Some smaller towns have few OSM-tagged highway bridges. Try: `Warsaw`, `Wroclaw`, `Krakow`, `Gdansk`.
 
-**"Scan this area" returns nothing**
-→ Zoom in more — a viewport covering an entire country will return too many results and may time out. Zoom to city level (zoom 12–14) before scanning.
+**Analysis takes longer than expected**
+The physics swarm runs 7 agents with multiple Gemini calls. Expect 30-60 seconds per bridge. If scour or structural type agents fail, the report still generates with lower confidence.
 
-**Rate limited (429)**
-→ The API has rate limiting enabled. Add `X-API-Key` header with your production key, or adjust limits in `config.py`.
+**Street View images don't appear**
+Street View coverage is sparse in rural areas. The vision agent returns `None` and scoring falls back to moderate-risk defaults. The confidence caveat notes the limitation.
 
-**Street View images don't appear after analysis**
-→ Street View coverage is sparse in rural areas. The vision agent returns `None` and the risk score falls back to a 3.0 visual component. The confidence caveat in the report will note the limitation.
+**PDF missing Physics Health Certificate pages**
+Ensure you re-analysed the bridge after the latest code update. Old cached results don't include the certificate. Hard-refresh the browser (`Ctrl+Shift+R`) and run a new analysis.
 
-**Frontend map is blank**
-→ The map uses OpenStreetMap via Leaflet — no API key needed. If it's blank, check browser console for network errors (tile requests to `tile.openstreetmap.org` are blocked). Restart `npm run dev` after any `.env` change.
-
-**Demo cache not found (`/api/demo` returns 404)**
-→ Run `python scripts/precompute_demo.py` from the `deepinspect/` root with the backend venv active.
-
-**Tests failing**
-→ Run backend tests: `cd backend && python -m pytest tests/ -v`
-→ Run E2E tests: `cd tests-e2e && npx playwright test`
+**Certificate shows "low" confidence on most criteria**
+This is expected when only Street View imagery is available. Low confidence triggers pessimistic bias (higher risk scores) and field-inspection flags. This is a feature, not a bug.
