@@ -1,0 +1,229 @@
+{
+  "version": "1.0.0",
+  "description": "DeepInspect PhysicsHealthCertificate score to national bridge rating system mappings",
+  "source_system": "DeepInspect PhysicsHealthCertificate",
+  "source_range": [1.0, 5.0],
+  "source_direction": "ascending_risk",
+  "source_tiers": {
+    "OK":       {"min": 1.0, "max": 1.99},
+    "MEDIUM":   {"min": 2.0, "max": 2.99},
+    "HIGH":     {"min": 3.0, "max": 3.99},
+    "CRITICAL": {"min": 4.0, "max": 5.0}
+  },
+  "notes": [
+    "All mappings are approximate. DeepInspect is a remote screening tool; national systems require physical inspection.",
+    "For worst-component systems (France IQOA, Netherlands NEN 2767), use max(criterion_scores) not the weighted overall score.",
+    "For weighted/average systems (Germany DIN 1076, Norway Brutus), use the overall weighted score.",
+    "The 'direction' field: 'ascending_risk' = higher number is worse; 'descending_risk' = higher number is better.",
+    "Breakpoints use piecewise linear interpolation between listed points."
+  ],
+  "target_systems": {
+
+    "germany_zustandsnote": {
+      "standard": "DIN 1076 / RI-EBW-PRÜF",
+      "country": "Germany",
+      "database": "SIB-Bauwerke (BASt)",
+      "range": [1.0, 4.0],
+      "direction": "ascending_risk",
+      "input_score": "overall_weighted_score",
+      "mapping_type": "piecewise_linear",
+      "breakpoints": [
+        {"deepinspect": 1.0, "target": 1.0, "tier": "OK",       "target_label": "Sehr gut (Very good)"},
+        {"deepinspect": 1.9, "target": 1.4, "tier": "OK",       "target_label": "Sehr gut"},
+        {"deepinspect": 2.0, "target": 1.5, "tier": "MEDIUM",   "target_label": "Gut (Good)"},
+        {"deepinspect": 2.4, "target": 1.9, "tier": "MEDIUM",   "target_label": "Gut"},
+        {"deepinspect": 2.5, "target": 2.0, "tier": "MEDIUM",   "target_label": "Befriedigend (Satisfactory)"},
+        {"deepinspect": 2.9, "target": 2.4, "tier": "MEDIUM",   "target_label": "Befriedigend"},
+        {"deepinspect": 3.0, "target": 2.5, "tier": "HIGH",     "target_label": "Ausreichend (Adequate)"},
+        {"deepinspect": 3.4, "target": 2.9, "tier": "HIGH",     "target_label": "Ausreichend"},
+        {"deepinspect": 3.5, "target": 3.0, "tier": "HIGH",     "target_label": "Nicht ausreichend (Deficient)"},
+        {"deepinspect": 3.9, "target": 3.4, "tier": "HIGH",     "target_label": "Nicht ausreichend"},
+        {"deepinspect": 4.0, "target": 3.5, "tier": "CRITICAL", "target_label": "Ungenügend (Insufficient)"},
+        {"deepinspect": 5.0, "target": 4.0, "tier": "CRITICAL", "target_label": "Gefährlich (Dangerous)"}
+      ],
+      "svd_axes_note": "For S/V/D axis decomposition, see criteria_to_din1076_svd.json",
+      "osa_note": "For element-level OSA damage code mapping, see germany-din1076.md"
+    },
+
+    "france_iqoa": {
+      "standard": "IQOA / Cerema",
+      "country": "France",
+      "database": "Cerema IQOA database",
+      "classes": ["1", "2", "2E", "3", "3U"],
+      "safety_suffix": "S",
+      "safety_suffix_note": "Append 'S' to any class when any safety-related criterion (rank 10 or 11) scores >= 4.0 with a user-safety finding. Produces: 1S, 2S, 2ES, 3S, 3US.",
+      "direction": "ascending_risk",
+      "input_score": "max_criterion_score",
+      "input_score_note": "IQOA uses worst-component logic. Apply thresholds to max(criterion_scores), not the weighted overall score.",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.99, "target": "1",  "description": "Bon état — no significant defects"},
+        {"deepinspect_max": 2.39, "target": "2",  "description": "Défauts mineurs — minor defects, no immediate risk"},
+        {"deepinspect_max": 2.99, "target": "2E", "description": "Défauts importants — significant durability defects, specialized maintenance needed"},
+        {"deepinspect_max": 3.99, "target": "3",  "description": "Défauts graves — serious defects, structural behavior impaired"},
+        {"deepinspect_max": 5.0,  "target": "3U", "description": "Défauts très graves — very serious defects, urgent risk to integrity or safety"}
+      ]
+    },
+
+    "uk_bci": {
+      "standard": "CS 450 / National Highways",
+      "country": "United Kingdom",
+      "database": "National Highways Structures Asset Data (open data)",
+      "range": [0, 100],
+      "direction": "descending_risk",
+      "input_score": "overall_weighted_score",
+      "mapping_type": "piecewise_linear",
+      "formula": "BCI_Ave = 100 - (deepinspect - 1.0) * 25.0",
+      "formula_note": "Linear inversion. DeepInspect 1.0→BCI 100, DeepInspect 5.0→BCI 0.",
+      "breakpoints": [
+        {"deepinspect": 1.0, "target_bci_ave": 100, "tier": "OK",       "target_label": "Very good"},
+        {"deepinspect": 1.6, "target_bci_ave": 85,  "tier": "OK",       "target_label": "Very good"},
+        {"deepinspect": 1.9, "target_bci_ave": 77,  "tier": "OK",       "target_label": "Good"},
+        {"deepinspect": 2.0, "target_bci_ave": 75,  "tier": "MEDIUM",   "target_label": "Good"},
+        {"deepinspect": 2.5, "target_bci_ave": 62,  "tier": "MEDIUM",   "target_label": "Fair"},
+        {"deepinspect": 2.9, "target_bci_ave": 53,  "tier": "MEDIUM",   "target_label": "Poor"},
+        {"deepinspect": 3.0, "target_bci_ave": 50,  "tier": "HIGH",     "target_label": "Poor"},
+        {"deepinspect": 3.6, "target_bci_ave": 35,  "tier": "HIGH",     "target_label": "Very poor"},
+        {"deepinspect": 3.9, "target_bci_ave": 28,  "tier": "HIGH",     "target_label": "Very poor"},
+        {"deepinspect": 4.0, "target_bci_ave": 25,  "tier": "CRITICAL", "target_label": "Very poor"},
+        {"deepinspect": 4.5, "target_bci_ave": 12,  "tier": "CRITICAL", "target_label": "Serious"},
+        {"deepinspect": 5.0, "target_bci_ave": 0,   "tier": "CRITICAL", "target_label": "Serious"}
+      ],
+      "bci_critical_note": "BCI_Critical is computed from max(criterion_scores) using the same formula. Report both BCI_Ave and BCI_Crit in UK outputs.",
+      "condition_bands": {
+        "85-100": "Very good — routine maintenance only",
+        "70-84": "Good — monitor, plan preventive maintenance",
+        "60-69": "Fair — maintenance within 3 years",
+        "40-59": "Poor — priority maintenance within 1-2 years",
+        "20-39": "Very poor — urgent intervention; load restriction review",
+        "0-19":  "Serious — immediate action; possible closure"
+      }
+    },
+
+    "netherlands_nen2767": {
+      "standard": "NEN 2767 / Rijkswaterstaat",
+      "country": "Netherlands",
+      "database": "NARIS / DISK (Rijkswaterstaat)",
+      "range": [1, 6],
+      "direction": "ascending_deterioration",
+      "direction_note": "Scale is 1=as-built (excellent), 6=must replace. This is ascending deterioration, not risk. Higher = more deteriorated.",
+      "input_score": "max_criterion_score",
+      "input_score_note": "NEN 2767 uses worst-element logic. Apply to max(criterion_scores).",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.4,  "target": 1, "target_label": "Uitstekend (Excellent) — as-built condition"},
+        {"deepinspect_max": 2.0,  "target": 2, "target_label": "Goed (Good) — slight aging, cosmetic only"},
+        {"deepinspect_max": 2.7,  "target": 3, "target_label": "Redelijk (Reasonable) — moderate deterioration"},
+        {"deepinspect_max": 3.5,  "target": 4, "target_label": "Matig (Moderate) — significant deterioration, function reduced"},
+        {"deepinspect_max": 4.3,  "target": 5, "target_label": "Slecht (Poor) — serious deterioration, loss of function in progress"},
+        {"deepinspect_max": 5.0,  "target": 6, "target_label": "Zeer slecht (Very poor) — failure of function, replacement required"}
+      ],
+      "assessment_dimensions": {
+        "intensity": "1 (slight) to 3 (serious) — severity of defect in its affected area",
+        "extent": "1 (<2%) to 5 (>70%) — proportion of element affected",
+        "relevance": "Element weighting by functional importance"
+      }
+    },
+
+    "italy_coa": {
+      "standard": "Linee Guida 2020 / MIT / CSLP",
+      "country": "Italy",
+      "database": "AINOP (Archivio Informatico Nazionale delle Opere Pubbliche)",
+      "classes": ["LOW", "MEDIUM_LOW", "MEDIUM", "MEDIUM_HIGH", "HIGH"],
+      "direction": "ascending_risk",
+      "input_score": "overall_weighted_score",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.99, "target": "LOW",         "target_it": "BASSA",       "description": "No significant risk"},
+        {"deepinspect_max": 2.39, "target": "MEDIUM_LOW",  "target_it": "MEDIO-BASSA", "description": "Minor concerns, accelerated monitoring"},
+        {"deepinspect_max": 2.99, "target": "MEDIUM",      "target_it": "MEDIA",       "description": "Moderate risk, inspect within 12 months"},
+        {"deepinspect_max": 3.99, "target": "MEDIUM_HIGH", "target_it": "MEDIO-ALTA",  "description": "Significant risk, Level 3 investigation within 6 months"},
+        {"deepinspect_max": 5.0,  "target": "HIGH",        "target_it": "ALTA",        "description": "Serious risk, Level 3/4 investigation within 90 days"}
+      ],
+      "risk_types_note": "DeepInspect currently covers structural and partial hydraulic risk. Seismic and landslide risks require integration of INGV and ISPRA data for full Italian CoA. See italian_coa_mapping.json.",
+      "multi_hazard_note": "Full Italian CoA = worst-of(structural, seismic, landslide, hydraulic) with upward adjustment if 2+ types >= MEDIUM."
+    },
+
+    "poland_gddkia": {
+      "standard": "GDDKiA Bridge Management System / WT-2",
+      "country": "Poland",
+      "database": "GDDKiA BMS",
+      "range": [0, 5],
+      "direction": "ascending_risk",
+      "input_score": "overall_weighted_score",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.4,  "target": 0, "target_label": "Bardzo dobry (Excellent) — no defects"},
+        {"deepinspect_max": 2.0,  "target": 1, "target_label": "Dobry (Good) — minor aging, all functions intact"},
+        {"deepinspect_max": 2.7,  "target": 2, "target_label": "Dostateczny (Satisfactory) — moderate deterioration"},
+        {"deepinspect_max": 3.5,  "target": 3, "target_label": "Niezadowalający (Unsatisfactory) — function impaired"},
+        {"deepinspect_max": 4.3,  "target": 4, "target_label": "Zły (Bad) — load capacity reduced, safety concerns"},
+        {"deepinspect_max": 5.0,  "target": 5, "target_label": "Awaryjny (Emergency) — pre-failure, immediate closure"}
+      ],
+      "alignment_note": "Polish GDDKiA 0-5 is the closest scale to DeepInspect 1-5 of any European system. Simple offset and slight compression only."
+    },
+
+    "norway_brutus": {
+      "standard": "Brutus / NVDB (Statens vegvesen)",
+      "country": "Norway",
+      "database": "NVDB REST API — https://nvdbapiles-v3.atlas.vegvesen.no/",
+      "range": [0, 4],
+      "direction": "ascending_deterioration",
+      "input_score": "max_criterion_score",
+      "input_score_note": "Brutus uses worst-element per-element grades. Map max(criterion_scores) for element-level comparison.",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.4,  "target": 0, "target_label": "Meget god (Very good) — no defects"},
+        {"deepinspect_max": 2.1,  "target": 1, "target_label": "God (Good) — slight aging, cosmetic"},
+        {"deepinspect_max": 3.1,  "target": 2, "target_label": "Middels (Moderate) — durability affected, function intact"},
+        {"deepinspect_max": 4.0,  "target": 3, "target_label": "Dårlig (Poor) — function affected"},
+        {"deepinspect_max": 5.0,  "target": 4, "target_label": "Meget dårlig (Very poor) — serious, safety concerns"}
+      ],
+      "api_note": "NVDB object type 60 = bridges. Attribute 'Tilstandsgrad' = condition grade. Public REST API, no authentication required for read access."
+    },
+
+    "sweden_batman": {
+      "standard": "BaTMan / Trafikverket (TRVINFRA-00084)",
+      "country": "Sweden",
+      "database": "BaTMan — https://batman.trafikverket.se/",
+      "range": [0, 4],
+      "direction": "ascending_deterioration",
+      "input_score": "max_criterion_score",
+      "mapping_type": "threshold",
+      "thresholds": [
+        {"deepinspect_max": 1.4,  "target": 0, "target_label": "Inga anmärkningar (No remarks) — as-built"},
+        {"deepinspect_max": 2.1,  "target": 1, "target_label": "Ytliga skador (Surface damage) — superficial, durability slightly affected"},
+        {"deepinspect_max": 3.1,  "target": 2, "target_label": "Ytliga, spridda skador (Surface, spread) — moderate, functional impact minor"},
+        {"deepinspect_max": 4.0,  "target": 3, "target_label": "Djupgående skador (Deep damage) — structural material affected, function impaired"},
+        {"deepinspect_max": 5.0,  "target": 4, "target_label": "Allvarliga skador (Serious damage) — structural safety affected, urgent action"}
+      ],
+      "api_note": "Public portal: batman.trafikverket.se. API read-only accounts by application to Trafikverket Kundtjänst.",
+      "scale_note": "BaTMan 0-4 is identical in concept to Norway Brutus 0-4. Same thresholds apply."
+    },
+
+    "us_nbi": {
+      "standard": "National Bridge Inspection Standards (NBIS) / FHWA",
+      "country": "United States",
+      "database": "NBI (National Bridge Inventory) — FHWA public dataset",
+      "range": [0, 9],
+      "direction": "descending_risk",
+      "direction_note": "NBI is descending risk: 9=excellent/new, 0=failed/out of service.",
+      "input_score": "overall_weighted_score",
+      "mapping_type": "piecewise_linear",
+      "breakpoints": [
+        {"deepinspect": 1.0, "target": 9,   "tier": "OK",       "target_label": "Excellent — new construction"},
+        {"deepinspect": 1.4, "target": 8,   "tier": "OK",       "target_label": "Very good — minor problems"},
+        {"deepinspect": 1.9, "target": 7,   "tier": "OK",       "target_label": "Good — some minor defects"},
+        {"deepinspect": 2.0, "target": 6,   "tier": "MEDIUM",   "target_label": "Satisfactory — structural defects possible"},
+        {"deepinspect": 2.5, "target": 5,   "tier": "MEDIUM",   "target_label": "Fair — primary structural elements minor defects"},
+        {"deepinspect": 2.9, "target": 4,   "tier": "MEDIUM",   "target_label": "Poor — advanced section loss, cracking"},
+        {"deepinspect": 3.0, "target": 3,   "tier": "HIGH",     "target_label": "Serious — loss of cross section, cracking, spalling"},
+        {"deepinspect": 3.9, "target": 2,   "tier": "HIGH",     "target_label": "Critical — advanced deterioration"},
+        {"deepinspect": 4.5, "target": 1,   "tier": "CRITICAL", "target_label": "Imminent failure — essentially failed portions"},
+        {"deepinspect": 5.0, "target": 0,   "tier": "CRITICAL", "target_label": "Failed — out of service, beyond corrective action"}
+      ],
+      "structurally_deficient_note": "NBI rating of 4 or below on deck, superstructure, or substructure = Structurally Deficient (SD). Equivalent to DeepInspect >= 2.9.",
+      "scour_critical_note": "NBI Item 113 = scour critical status. Separate from condition rating. DeepInspect Criterion 1 score >= 3.5 should trigger scour-critical flag in NBI output."
+    }
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "version": "1.0.0",
+  "description": "Maps DeepInspect's 14 visual defect categories to CODEBRIM's 6 multi-label classes (CVPR 2019)",
+  "source": "DeepInspect VisualAssessment defect taxonomy",
+  "target_dataset": "CODEBRIM",
+  "target_paper": "Mundt et al. (2019) CVPR — CODEBRIM: Concrete Defect Bridge Image Segmentation Dataset",
+  "target_url": "https://zenodo.org/record/2620293",
+  "target_classes_count": 6,
+  "notes": [
+    "CODEBRIM uses multi-label image classification (not pixel segmentation like dacl10k).",
+    "One image can have multiple CODEBRIM classes simultaneously.",
+    "CODEBRIM covers concrete bridges only — steel and timber defects are out of scope.",
+    "DeepInspect categories with no CODEBRIM equivalent must rely on other evidence sources.",
+    "CODEBRIM training accuracy: ~85% mAP on held-out test set (original paper)."
+  ],
+  "codebrim_classes": [
+    {
+      "id": 0,
+      "name": "crack",
+      "description": "Crack in concrete — linear fracture of any width or orientation",
+      "detection_accuracy": "high (82% precision in original paper)"
+    },
+    {
+      "id": 1,
+      "name": "spalling",
+      "description": "Concrete cover loss — detachment of surface layer revealing aggregate",
+      "detection_accuracy": "high (86% precision)"
+    },
+    {
+      "id": 2,
+      "name": "efflorescence",
+      "description": "White salt crystal deposits on concrete surface from water migration",
+      "detection_accuracy": "medium (74% precision)"
+    },
+    {
+      "id": 3,
+      "name": "exposed_reinforcement",
+      "description": "Reinforcing steel bars visible through cover loss, with or without active corrosion",
+      "detection_accuracy": "high (89% precision)"
+    },
+    {
+      "id": 4,
+      "name": "corrosion_stain",
+      "description": "Rust/iron oxide staining on concrete surface from corroding embedded steel",
+      "detection_accuracy": "high (83% precision)"
+    },
+    {
+      "id": 5,
+      "name": "bearing_failure",
+      "description": "Visible deterioration or failure of bridge bearings",
+      "detection_accuracy": "medium (68% precision — small objects, often occluded)"
+    }
+  ],
+  "deepinspect_to_codebrim": [
+    {
+      "deepinspect_category": "cracking",
+      "codebrim_classes": [0],
+      "mapping_type": "direct",
+      "notes": "Direct 1:1 correspondence. CODEBRIM crack class covers all crack types visible in inspection photos.",
+      "limitations": "CODEBRIM does not distinguish crack type (structural vs. shrinkage vs. fatigue). Crack severity must be assessed from image context, not class label alone."
+    },
+    {
+      "deepinspect_category": "spalling",
+      "codebrim_classes": [1],
+      "mapping_type": "direct",
+      "notes": "Direct 1:1 correspondence.",
+      "limitations": "CODEBRIM spalling class does not quantify area. Extent assessment requires additional analysis."
+    },
+    {
+      "deepinspect_category": "exposed_reinforcement",
+      "codebrim_classes": [3],
+      "mapping_type": "direct",
+      "notes": "Direct 1:1 correspondence. Presence of CODEBRIM class 3 automatically sets DeepInspect score floor at 4.0 for affected criterion.",
+      "score_floor": 4.0
+    },
+    {
+      "deepinspect_category": "corrosion",
+      "codebrim_classes": [4, 3],
+      "mapping_type": "composite",
+      "notes": "Primary: corrosion_stain (class 4) indicates active rust. Secondary: exposed_reinforcement (class 3) when rebar is visibly corroded. Both together indicate severe corrosion state.",
+      "scoring_logic": "class 4 alone → score 3.0-4.0; class 3 + class 4 → score 4.0-5.0"
+    },
+    {
+      "deepinspect_category": "efflorescence",
+      "codebrim_classes": [2],
+      "mapping_type": "direct",
+      "notes": "Direct 1:1 correspondence. Efflorescence indicates water migration pathway — not a structural defect itself but a durability indicator.",
+      "score_cap": 3.5,
+      "score_cap_note": "Efflorescence alone should not exceed 3.5 without co-occurring cracks or spalling."
+    },
+    {
+      "deepinspect_category": "surface_degradation",
+      "codebrim_classes": [1, 2],
+      "mapping_type": "composite",
+      "notes": "Surface degradation uses spalling (class 1) and efflorescence (class 2) as evidence proxies. Neither alone constitutes the full category.",
+      "limitations": "CODEBRIM does not have a general surface degradation class. Carbonation, weathering, and chemical attack are not distinguished."
+    },
+    {
+      "deepinspect_category": "bearing_condition",
+      "codebrim_classes": [5],
+      "mapping_type": "direct",
+      "notes": "Direct 1:1 correspondence via CODEBRIM bearing_failure class.",
+      "limitations": "CODEBRIM bearing_failure detection accuracy is lowest of all 6 classes (68%). Bearings are small objects often partially occluded. Supplement with manual review.",
+      "confidence_modifier": "low — use with caution"
+    },
+    {
+      "deepinspect_category": "structural_deformation",
+      "codebrim_classes": [],
+      "mapping_type": "none",
+      "notes": "No CODEBRIM class covers structural deformation or geometric anomalies. CODEBRIM is entirely surface-defect focused. Deformation must be assessed independently.",
+      "alternative": "Use geometric analysis of Street View imagery or photogrammetry. CODEBRIM provides no evidence."
+    },
+    {
+      "deepinspect_category": "drainage",
+      "codebrim_classes": [],
+      "mapping_type": "none",
+      "notes": "No CODEBRIM class for drainage defects. CODEBRIM dataset does not include drainage elements.",
+      "alternative": "Assess from Street View geometric context (standing water, staining patterns below drain positions)."
+    },
+    {
+      "deepinspect_category": "joint_condition",
+      "codebrim_classes": [],
+      "mapping_type": "none",
+      "notes": "No CODEBRIM class for expansion joints. CODEBRIM dataset does not include joint close-ups.",
+      "alternative": "Use dacl10k expansion_joint_deterioration class or direct visual assessment."
+    },
+    {
+      "deepinspect_category": "railing_condition",
+      "codebrim_classes": [],
+      "mapping_type": "none",
+      "notes": "No CODEBRIM class for railings or safety equipment. CODEBRIM is limited to concrete structural element defects.",
+      "alternative": "Use dacl10k protective_equipment_failure class."
+    },
+    {
+      "deepinspect_category": "protective_systems",
+      "codebrim_classes": [4],
+      "mapping_type": "partial",
+      "notes": "Corrosion stain (class 4) provides partial evidence for protective coating failure — rust bleeding indicates coating has failed in the affected area.",
+      "limitations": "Does not cover waterproofing or cathodic protection systems."
+    },
+    {
+      "deepinspect_category": "pier_condition",
+      "codebrim_classes": [0, 1, 3, 4],
+      "mapping_type": "element_composite",
+      "notes": "Pier condition is assessed from the combination of defect classes detected on pier elements. Any of crack, spalling, exposed_reinforcement, or corrosion_stain on piers contributes to pier condition score.",
+      "scoring_logic": "Highest severity class detected on pier determines primary score. Co-occurrence of multiple classes increases score."
+    },
+    {
+      "deepinspect_category": "abutment_condition",
+      "codebrim_classes": [0, 1, 2, 3, 4],
+      "mapping_type": "element_composite",
+      "notes": "Same logic as pier_condition but applied to abutment elements. Efflorescence is more commonly relevant for abutments (soil-side water migration)."
+    }
+  ],
+  "combined_severity_matrix": {
+    "description": "When multiple CODEBRIM classes co-occur, use this matrix to determine composite severity",
+    "combinations": [
+      {"classes": [3, 4], "interpretation": "Exposed reinforcement + corrosion stain → active rebar corrosion", "score_min": 4.0},
+      {"classes": [0, 1], "interpretation": "Crack + spalling → advanced concrete distress", "score_min": 3.5},
+      {"classes": [1, 3], "interpretation": "Spalling with exposed reinforcement → critical cover loss", "score_min": 4.5},
+      {"classes": [0, 3, 4], "interpretation": "Crack + exposed rebar + rust → imminent structural risk", "score_min": 4.5},
+      {"classes": [2], "interpretation": "Efflorescence only → durability concern, not immediate structural risk", "score_max": 3.0}
+    ]
+  }
+}

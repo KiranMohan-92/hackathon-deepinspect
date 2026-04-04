@@ -1,0 +1,186 @@
+{
+  "version": "1.0.0",
+  "description": "Maps DeepInspect's 14 visual defect categories to dacl10k's 19 semantic segmentation classes (WACV 2024)",
+  "source": "DeepInspect VisualAssessment defect taxonomy (backend/models/vision.py)",
+  "target_dataset": "dacl10k",
+  "target_paper": "Flotzinger et al. (2024) WACV — dacl10k: Benchmark for Semantic Bridge Damage Segmentation",
+  "target_url": "https://dacl.ai/",
+  "target_classes_count": 19,
+  "notes": [
+    "dacl10k uses pixel-level semantic segmentation. DeepInspect uses element-level scoring.",
+    "Mappings show which dacl10k classes are evidence sources for each DeepInspect defect category.",
+    "One DeepInspect category may map to multiple dacl10k classes (evidence aggregation).",
+    "One dacl10k class may contribute to multiple DeepInspect categories (shared evidence).",
+    "Confidence modifier: if the mapped dacl10k class is detected in the image, it increases confidence in the DeepInspect defect category assessment."
+  ],
+  "dacl10k_classes": [
+    "crack", "alligator_crack", "efflorescence", "spalling", "exposed_reinforcement",
+    "bearing_deterioration", "expansion_joint_deterioration", "drainage_issue",
+    "protective_equipment_failure", "graffiti", "restained_area", "woodrot",
+    "surface_staining", "concrete_deterioration", "corrosion_stain", "paint_failure",
+    "damaged_concrete", "wetness", "vegetation"
+  ],
+  "deepinspect_to_dacl10k": [
+    {
+      "deepinspect_category": "cracking",
+      "deepinspect_description": "Cracks in concrete or steel elements visible from street level",
+      "criterion_primary": [4, 5, 9],
+      "criterion_secondary": [6, 7],
+      "dacl10k_classes": ["crack", "alligator_crack"],
+      "dacl10k_notes": {
+        "crack": "Primary evidence for linear cracking in concrete/masonry elements",
+        "alligator_crack": "Map-cracking pattern indicating advanced deterioration, ASR, or freeze-thaw damage"
+      },
+      "confidence_modifier": "high — crack presence is visually unambiguous when present"
+    },
+    {
+      "deepinspect_category": "spalling",
+      "deepinspect_description": "Loss of concrete cover exposing aggregate or reinforcement",
+      "criterion_primary": [4, 5, 9],
+      "criterion_secondary": [7],
+      "dacl10k_classes": ["spalling", "damaged_concrete"],
+      "dacl10k_notes": {
+        "spalling": "Direct 1:1 correspondence — concrete cover loss",
+        "damaged_concrete": "More advanced spalling with structural material loss"
+      },
+      "confidence_modifier": "high"
+    },
+    {
+      "deepinspect_category": "exposed_reinforcement",
+      "deepinspect_description": "Reinforcing steel visible due to cover loss, with or without active corrosion",
+      "criterion_primary": [4, 5, 7],
+      "criterion_secondary": [9],
+      "dacl10k_classes": ["exposed_reinforcement"],
+      "dacl10k_notes": {
+        "exposed_reinforcement": "Direct 1:1 correspondence. Presence automatically scores this criterion at minimum 4.0 (HIGH)."
+      },
+      "confidence_modifier": "high — visually unambiguous",
+      "score_floor": 4.0,
+      "score_floor_rationale": "Exposed reinforcement indicates cover failure and active corrosion risk — always at least HIGH severity"
+    },
+    {
+      "deepinspect_category": "corrosion",
+      "deepinspect_description": "Rust staining, section loss, or active corrosion of steel elements",
+      "criterion_primary": [5, 7],
+      "criterion_secondary": [4, 8],
+      "dacl10k_classes": ["corrosion_stain", "paint_failure", "exposed_reinforcement"],
+      "dacl10k_notes": {
+        "corrosion_stain": "Rust bleeding from reinforcement or structural steel — evidence of active corrosion",
+        "paint_failure": "Coating breakdown exposing steel to corrosive environment — leading indicator",
+        "exposed_reinforcement": "Severe corrosion stage — rebar fully exposed"
+      },
+      "confidence_modifier": "medium — corrosion extent hard to judge from street-level imagery"
+    },
+    {
+      "deepinspect_category": "efflorescence",
+      "deepinspect_description": "White salt deposits indicating water migration through concrete",
+      "criterion_primary": [7, 9],
+      "criterion_secondary": [4],
+      "dacl10k_classes": ["efflorescence", "wetness", "surface_staining"],
+      "dacl10k_notes": {
+        "efflorescence": "Direct 1:1 — white calcium carbonate deposits from water migration",
+        "wetness": "Active water ingress — efflorescence precursor or accompaniment",
+        "surface_staining": "Broader staining category that includes efflorescence"
+      },
+      "confidence_modifier": "medium — efflorescence indicates water pathway but not severity of source defect"
+    },
+    {
+      "deepinspect_category": "surface_degradation",
+      "deepinspect_description": "General surface deterioration including delamination, scaling, and weathering",
+      "criterion_primary": [7, 9],
+      "criterion_secondary": [4],
+      "dacl10k_classes": ["concrete_deterioration", "surface_staining", "restained_area"],
+      "dacl10k_notes": {
+        "concrete_deterioration": "General surface breakdown without clear primary mechanism",
+        "surface_staining": "Discoloration indicating chemical attack or water",
+        "restained_area": "Areas repaired or stained from previous repair — signs of maintenance history"
+      },
+      "confidence_modifier": "medium"
+    },
+    {
+      "deepinspect_category": "structural_deformation",
+      "deepinspect_description": "Visible geometric deformation, settlement, tilt, or unusual deflection",
+      "criterion_primary": [6, 4, 10],
+      "criterion_secondary": [2],
+      "dacl10k_classes": [],
+      "dacl10k_notes_general": "dacl10k does not include a deformation/settlement class. Structural deformation must be assessed from geometric cues in street imagery, not from dacl10k segmentation.",
+      "confidence_modifier": "low — geometric deformation assessment from 2D imagery is unreliable"
+    },
+    {
+      "deepinspect_category": "drainage",
+      "deepinspect_description": "Blocked, damaged, or inadequate drainage elements",
+      "criterion_primary": [9, 11],
+      "criterion_secondary": [7],
+      "dacl10k_classes": ["drainage_issue", "vegetation"],
+      "dacl10k_notes": {
+        "drainage_issue": "Direct 1:1 — blocked drains, standing water, damaged downpipes",
+        "vegetation": "Plant growth blocking drains or indicating standing water"
+      },
+      "confidence_modifier": "medium"
+    },
+    {
+      "deepinspect_category": "bearing_condition",
+      "deepinspect_description": "Condition of bridge bearings (elastomeric, pot, rocker types)",
+      "criterion_primary": [8],
+      "criterion_secondary": [7],
+      "dacl10k_classes": ["bearing_deterioration"],
+      "dacl10k_notes": {
+        "bearing_deterioration": "Direct 1:1 — cracked elastomeric bearings, corroded steel bearings, missing anchor bolts"
+      },
+      "confidence_modifier": "low — bearings often not visible from street level; Street View angle rarely shows bearing shelf"
+    },
+    {
+      "deepinspect_category": "joint_condition",
+      "deepinspect_description": "Condition of expansion joints (compression seals, finger joints, buried joints)",
+      "criterion_primary": [8],
+      "criterion_secondary": [9],
+      "dacl10k_classes": ["expansion_joint_deterioration"],
+      "dacl10k_notes": {
+        "expansion_joint_deterioration": "Direct 1:1 — failed seals, missing nosings, debris-filled gaps, stepped joints"
+      },
+      "confidence_modifier": "medium — joints visible from road level but often obscured by traffic markings"
+    },
+    {
+      "deepinspect_category": "railing_condition",
+      "deepinspect_description": "Condition of safety railings, parapets, and vehicle restraint systems",
+      "criterion_primary": [11],
+      "criterion_secondary": [10],
+      "dacl10k_classes": ["protective_equipment_failure"],
+      "dacl10k_notes": {
+        "protective_equipment_failure": "dacl10k defines this as failure of protective/safety equipment — directly maps to damaged railings, missing posts, crash-damaged barriers"
+      },
+      "confidence_modifier": "high — railings clearly visible from street level and at road-deck height",
+      "iqoa_s_suffix_trigger": true
+    },
+    {
+      "deepinspect_category": "protective_systems",
+      "deepinspect_description": "Protective coatings, cathodic protection systems, and waterproofing",
+      "criterion_primary": [11, 7],
+      "criterion_secondary": [5],
+      "dacl10k_classes": ["paint_failure", "surface_staining"],
+      "dacl10k_notes": {
+        "paint_failure": "Coating breakdown — primary evidence for protective system failure",
+        "surface_staining": "May indicate waterproofing failure or coating degradation"
+      },
+      "confidence_modifier": "medium"
+    },
+    {
+      "deepinspect_category": "pier_condition",
+      "deepinspect_description": "Condition of bridge piers including base, shaft, and cap",
+      "criterion_primary": [4, 1],
+      "criterion_secondary": [7],
+      "dacl10k_classes": ["crack", "spalling", "exposed_reinforcement", "efflorescence", "corrosion_stain"],
+      "dacl10k_notes_general": "Pier condition is assessed by detecting the set of defect classes present on pier elements. No dacl10k class specifically for piers — element identification is by location context.",
+      "confidence_modifier": "medium — pier base often obscured by vegetation, water, or street furniture"
+    },
+    {
+      "deepinspect_category": "abutment_condition",
+      "deepinspect_description": "Condition of bridge abutments, wing walls, and approach fills",
+      "criterion_primary": [4],
+      "criterion_secondary": [1, 7],
+      "dacl10k_classes": ["crack", "spalling", "exposed_reinforcement", "vegetation"],
+      "dacl10k_notes_general": "Abutment condition uses same defect classes as pier condition. Vegetation on abutments indicates moisture accumulation and potential backfill drainage issues.",
+      "confidence_modifier": "low — abutments often below road level or obscured by approach embankments"
+    }
+  ]
+}

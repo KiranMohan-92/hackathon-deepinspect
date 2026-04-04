@@ -1,0 +1,225 @@
+{
+  "version": "1.0.0",
+  "description": "Maps DeepInspect's 11 criteria to Italian Linee Guida 2020 multi-hazard risk types (H×V×E framework)",
+  "source": "DeepInspect PhysicsHealthCertificate criteria",
+  "target_standard": "Linee Guida per la Classificazione e Gestione del Rischio dei Ponti Esistenti (2020)",
+  "target_issuer": "Consiglio Superiore dei Lavori Pubblici / MIT",
+  "reference": "https://doi.org/10.3390/infrastructures6040059",
+  "risk_types": {
+    "structural": {
+      "name_it": "Rischio strutturale e fondazionale",
+      "name_en": "Structural and foundational risk",
+      "components": ["Hazard (H)", "Vulnerability (V)", "Exposure (E)"],
+      "hazard_sources": ["Traffic loading", "Overloading history", "Flood return period at crossing", "Collision history"],
+      "vulnerability_sources": ["Structural condition", "Material deterioration", "Design standard vs NTC 2018"],
+      "exposure_sources": ["AADT traffic volume", "Strategic importance", "Alternative route availability"]
+    },
+    "seismic": {
+      "name_it": "Rischio sismico",
+      "name_en": "Seismic risk",
+      "components": ["Hazard (H)", "Vulnerability (V)", "Exposure (E)"],
+      "hazard_sources": ["INGV MPS04 seismic hazard map (PGA at 475yr return period)", "Site class (soil amplification)"],
+      "vulnerability_sources": ["Design era (pre/post seismic code)", "Bearing type", "Pier slenderness", "Connection details"],
+      "exposure_sources": ["AADT traffic volume", "Strategic importance", "Alternative route availability"],
+      "deepinspect_coverage": "NOT_COVERED",
+      "integration_path": "Integrate INGV SEISMIC API: https://ingv.it/it/ram/rischio-sismico to get site PGA. Vulnerability estimated from construction year and structural type."
+    },
+    "landslide": {
+      "name_it": "Rischio frana",
+      "name_en": "Landslide risk",
+      "components": ["Hazard (H)", "Vulnerability (V)", "Exposure (E)"],
+      "hazard_sources": ["ISPRA PAI landslide hazard map (P1/P2/P3/P4 classes)", "Hillslope gradient", "Geological formation"],
+      "vulnerability_sources": ["Abutment/approach embankment condition", "Drainage adequacy", "Historical slope movement evidence"],
+      "exposure_sources": ["AADT traffic volume", "Strategic importance", "Alternative route availability"],
+      "deepinspect_coverage": "NOT_COVERED",
+      "integration_path": "ISPRA landslide map API: https://idrogeo.isprambiente.it/app/. Query by coordinates to get PAI hazard class."
+    },
+    "hydraulic": {
+      "name_it": "Rischio idraulico",
+      "name_en": "Hydraulic (flood and scour) risk",
+      "components": ["Hazard (H)", "Vulnerability (V)", "Exposure (E)"],
+      "hazard_sources": ["PAI flood hazard class (R1/R2/R3/R4)", "River channel dynamics", "Flood return period at site"],
+      "vulnerability_sources": ["Scour protection adequacy", "Pier geometry", "Freeboard", "Age vs current hydraulic standards"],
+      "exposure_sources": ["AADT traffic volume", "Strategic importance", "Alternative route availability"],
+      "deepinspect_coverage": "PARTIAL",
+      "deepinspect_coverage_note": "Criterion 1 (Scour/Foundations) covers hydraulic vulnerability. Flood hazard H component from OSM waterway tags + flood zone classification."
+    }
+  },
+  "criteria_to_risk_types": [
+    {
+      "rank": 1,
+      "name": "Scour / Foundations / Channel Stability",
+      "criterion_key": "scour_foundations",
+      "risk_type_primary": "hydraulic",
+      "risk_type_secondary": "structural",
+      "hve_component": "V",
+      "hve_component_note": "This criterion assesses Vulnerability (V) to hydraulic Hazard (H). The H component comes from flood maps; V from scour susceptibility assessment.",
+      "italian_level_equivalent": "Level 1 + Level 2 partial",
+      "coa_contribution": "HIGH weight in hydraulic risk calculation; MEDIUM weight in structural risk (foundation integrity)",
+      "coverage": "COVERED",
+      "data_sources": ["OSM waterway tags", "Flood zone classification maps", "Street View visual indicators", "IMGW/local flood maps if available"]
+    },
+    {
+      "rank": 2,
+      "name": "Load-Path Continuity and Redundancy (NSTM)",
+      "criterion_key": "redundancy_load_path",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Redundancy is a structural Vulnerability property — non-redundant bridges are more vulnerable to any structural threat.",
+      "italian_level_equivalent": "Level 2 partial",
+      "coa_contribution": "HIGH weight in structural risk Vulnerability component",
+      "coverage": "COVERED",
+      "data_sources": ["OSM bridge type tags", "Street View structural type identification", "Gemini Vision analysis"]
+    },
+    {
+      "rank": 3,
+      "name": "Capacity vs. Demand (Load Rating)",
+      "criterion_key": "capacity_vs_demand",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Inadequate capacity increases structural Vulnerability to loading Hazard.",
+      "italian_level_equivalent": "Level 4 (structural analysis) — not achievable remotely",
+      "coa_contribution": "MEDIUM weight in structural risk; always flagged for Level 4 review",
+      "coverage": "PARTIAL",
+      "coverage_note": "Heuristic estimate only. Always low confidence. Flags for engineering load rating."
+    },
+    {
+      "rank": 4,
+      "name": "Substructure Integrity (Piers, Abutments, Pile Caps)",
+      "criterion_key": "substructure",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": "seismic",
+      "hve_component": "V",
+      "hve_component_note": "Substructure condition is a Vulnerability factor for both structural loading and seismic shaking.",
+      "italian_level_equivalent": "Level 2",
+      "coa_contribution": "HIGH weight in structural risk; MEDIUM weight in seismic risk Vulnerability",
+      "coverage": "COVERED",
+      "data_sources": ["Street View vision analysis — pier and abutment faces"]
+    },
+    {
+      "rank": 5,
+      "name": "Superstructure Primary Elements (Fatigue, Section Loss)",
+      "criterion_key": "superstructure",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Superstructure defects directly increase structural Vulnerability.",
+      "italian_level_equivalent": "Level 2",
+      "coa_contribution": "HIGH weight in structural risk Vulnerability",
+      "coverage": "COVERED",
+      "data_sources": ["Street View vision analysis — girder soffits, deck edges, bearings shelf area"]
+    },
+    {
+      "rank": 6,
+      "name": "Overall Stability (Buckling, Overturning, Progressive Collapse)",
+      "criterion_key": "stability",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": "seismic",
+      "hve_component": "V",
+      "hve_component_note": "Stability concerns increase vulnerability to both structural loading and seismic events.",
+      "italian_level_equivalent": "Level 3-4 (requires engineering analysis)",
+      "coa_contribution": "HIGH weight when flagged; Low confidence reduces contribution",
+      "coverage": "PARTIAL",
+      "coverage_note": "Global stability cannot be assessed remotely. Defaults to unknown (3.0) with low confidence."
+    },
+    {
+      "rank": 7,
+      "name": "Durability / Time-Dependent Degradation",
+      "criterion_key": "degradation",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Degradation increases structural Vulnerability over time.",
+      "italian_level_equivalent": "Level 2-3",
+      "coa_contribution": "MEDIUM weight in structural risk; drives remaining service life estimate",
+      "coverage": "COVERED",
+      "data_sources": ["Construction year (age)", "Material type", "Environmental classification (ISO 9223)", "Fick's law chloride diffusion model"]
+    },
+    {
+      "rank": 8,
+      "name": "Bearings, Joints, and Expansion Devices",
+      "criterion_key": "bearings_joints",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": "seismic",
+      "hve_component": "V",
+      "hve_component_note": "Bearing failure can affect seismic behavior (fixed vs. free bearing changes seismic response). Also structural durability.",
+      "italian_level_equivalent": "Level 2",
+      "coa_contribution": "LOW-MEDIUM weight in structural risk; MEDIUM weight in seismic risk if bearings are seismic isolation devices",
+      "coverage": "PARTIAL",
+      "coverage_note": "Bearings often not visible from Street View ground level. Low confidence typical."
+    },
+    {
+      "rank": 9,
+      "name": "Deck / Slab / Wearing Surface",
+      "criterion_key": "deck_slab",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Deck deterioration affects structural durability and user safety.",
+      "italian_level_equivalent": "Level 2",
+      "coa_contribution": "MEDIUM weight in structural risk",
+      "coverage": "COVERED",
+      "data_sources": ["Street View vision analysis — deck surface visible from road level"]
+    },
+    {
+      "rank": 10,
+      "name": "Stiffness and Serviceability (Deflections, Vibrations)",
+      "criterion_key": "serviceability",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Serviceability deficiencies reflect structural Vulnerability to loading.",
+      "italian_level_equivalent": "Level 3-4 (requires instrumented measurement)",
+      "coa_contribution": "LOW weight; always flagged for field verification",
+      "coverage": "NOT_COVERED",
+      "coverage_note": "No remote deflection measurement capability. Defaults to unknown (3.0)."
+    },
+    {
+      "rank": 11,
+      "name": "Ancillary / Protective Systems (Railings, Drainage, Coatings)",
+      "criterion_key": "ancillary",
+      "risk_type_primary": "structural",
+      "risk_type_secondary": null,
+      "hve_component": "V",
+      "hve_component_note": "Drainage failure accelerates structural deterioration (Vulnerability increase). Railing damage is a user safety issue mapped to Italian exposure component.",
+      "italian_level_equivalent": "Level 2",
+      "coa_contribution": "LOW weight in structural risk; contributes to Exposure (E) component via user safety",
+      "coverage": "COVERED",
+      "data_sources": ["Street View vision analysis — railings, drain outlets visible from road"]
+    }
+  ],
+  "coa_derivation_algorithm": {
+    "description": "Algorithm to derive Italian CoA from DeepInspect criteria, covering structural and hydraulic risk only",
+    "limitation": "Seismic and landslide risk components require external data integration (INGV + ISPRA). This algorithm produces a PARTIAL CoA.",
+    "steps": [
+      {
+        "step": 1,
+        "name": "Compute structural risk score",
+        "criteria_used": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        "method": "Use DeepInspect overall_risk_score (confidence-weighted)",
+        "output": "structural_risk_class in [LOW, MEDIUM_LOW, MEDIUM, MEDIUM_HIGH, HIGH]"
+      },
+      {
+        "step": 2,
+        "name": "Compute hydraulic risk score",
+        "criteria_used": [1],
+        "method": "Use Criterion 1 (Scour/Foundations) score + flood hazard zone from maps",
+        "output": "hydraulic_risk_class in [LOW, MEDIUM_LOW, MEDIUM, MEDIUM_HIGH, HIGH]"
+      },
+      {
+        "step": 3,
+        "name": "Combine available risk components",
+        "method": "Take worst-of(structural_risk, hydraulic_risk). Apply upward adjustment if both >= MEDIUM.",
+        "output": "partial_coa in [LOW, MEDIUM_LOW, MEDIUM, MEDIUM_HIGH, HIGH]"
+      },
+      {
+        "step": 4,
+        "name": "Label output as partial",
+        "output": "CoA labeled as 'PARTIAL — seismic and landslide assessment required for full Italian CoA compliance'"
+      }
+    ],
+    "python_pseudocode": "def derive_partial_italian_coa(overall_score, criterion_1_score, flood_zone):\n    COA_LEVELS = ['LOW', 'MEDIUM_LOW', 'MEDIUM', 'MEDIUM_HIGH', 'HIGH']\n    \n    def score_to_coa(score):\n        if score < 2.0: return 0  # LOW\n        elif score < 2.4: return 1  # MEDIUM_LOW\n        elif score < 3.0: return 2  # MEDIUM\n        elif score < 4.0: return 3  # MEDIUM_HIGH\n        else: return 4              # HIGH\n    \n    flood_hazard = {'R4': 4, 'R3': 3, 'R2': 2, 'R1': 1, 'none': 0}.get(flood_zone, 0)\n    hydraulic_v = score_to_coa(criterion_1_score)\n    hydraulic_risk = min(4, (flood_hazard + hydraulic_v) // 2 + (1 if flood_hazard >= 3 else 0))\n    \n    structural_risk = score_to_coa(overall_score)\n    \n    base_coa = max(structural_risk, hydraulic_risk)\n    if structural_risk >= 2 and hydraulic_risk >= 2:\n        base_coa = min(4, base_coa + 1)\n    \n    return {'coa': COA_LEVELS[base_coa], 'partial': True, 'missing_components': ['seismic', 'landslide']}"
+  }
+}
