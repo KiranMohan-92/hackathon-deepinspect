@@ -29,8 +29,9 @@ DeepInspect evaluates bridges against the same ranked criteria that govern real-
 8. [The 11-Criteria Physics Assessment](#8-the-11-criteria-physics-assessment)
 9. [Agent Architecture](#9-agent-architecture)
 10. [API Reference](#10-api-reference)
-11. [Project Structure](#11-project-structure)
-12. [Troubleshooting](#12-troubleshooting)
+11. [European Reference Library & Cross-Validation](#11-european-reference-library--cross-validation)
+12. [Project Structure](#12-project-structure)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -338,7 +339,72 @@ Content-Type: multipart/form-data
 
 ---
 
-## 11. Project Structure
+## 11. European Reference Library & Cross-Validation
+
+DeepInspect includes a comprehensive reference library for cross-validating its Physics Health Certificate against real European inspection data. This is the evidence base for authority adoption.
+
+### Score Mappings (`reference/mappings/`)
+
+Machine-readable JSON files that translate DeepInspect's 1.0-5.0 score to 9 international rating systems:
+
+| System | Scale | Direction | Example: DeepInspect 3.5 = |
+|--------|-------|-----------|---------------------------|
+| Germany Zustandsnote | 1.0-4.0 | Ascending | 2.75 |
+| France IQOA | 1/2/2E/3/3U (+S suffix) | Categorical | Class 3 |
+| UK BCI | 0-100 | Descending | 52 |
+| Netherlands NEN 2767 | 1-6 | Ascending | 4 |
+| Italy Class of Attention | LOW-HIGH | Categorical | MEDIUM-HIGH |
+| Poland GDDKiA | 0-5 | Ascending | 3 |
+| Norway Brutus | 0-4 | Ascending | 2.5 |
+| Sweden BaTMan | 0-3 | Ascending | 2 |
+| US NBI | 0-9 | Descending | 4 |
+
+The IQOA mapping includes the "S" safety suffix (immediate user safety risk) that can be appended to any class.
+
+### Open Datasets (`reference/datasets/`)
+
+Download scripts for publicly available bridge datasets:
+
+| Dataset | Bridges | Format | Script |
+|---------|---------|--------|--------|
+| **Norway NVDB** | 28,918 | REST API + CSV | `fetch_bridges.py` (verified working) |
+| **CODEBRIM** | 6 defect classes | Images + labels | `download.py` (Zenodo) |
+| **dacl10k** | 9,920 images, 19 classes | Segmentation masks | `download.py` (HuggingFace) |
+| **UK National Highways** | Strategic road network | CKAN API | `fetch_structures.py` |
+| **data.europa.eu** | EU-wide statistics | Various | `download.py` |
+
+```bash
+# Example: fetch Norwegian bridge metadata
+cd reference/datasets/norway-nvdb
+python fetch_bridges.py --metadata-only
+
+# Full fetch (28,918 bridges → JSON + CSV)
+python fetch_bridges.py --output-dir ./data
+```
+
+### Cross-Validation Methodology (`reference/methodology/`)
+
+A repeatable process for validating DeepInspect against official inspection data:
+
+1. **Select reference bridges** — 100 bridges across Norway, UK, Sweden with known ratings + Street View
+2. **Run DeepInspect** — full 7-agent pipeline, save PhysicsHealthCertificate JSON
+3. **Convert scores** — using `score_mappings.json` breakpoints
+4. **Compute agreement** — Pearson r, Cohen's Kappa, false-negative rate
+5. **Calibrate** — adjust `CRITERION_WEIGHTS` in `scoring.py` based on findings
+
+Safety-critical target: **false-negative rate < 10%** (how often DeepInspect misses a HIGH/CRITICAL bridge).
+
+### Country System Documentation (`reference/country-systems/`)
+
+Detailed documentation for 8 European rating systems: Germany (DIN 1076), France (IQOA), UK (CS 450), Netherlands (NEN 2767), Italy (Linee Guida 2020), Poland (GDDKiA), Norway (Brutus), Sweden (BaTMan). Each file includes: rating scale, damage codes, inspection cycle, network statistics, and mapping to DeepInspect criteria.
+
+### Research Benchmarks (`research/`)
+
+5 analysis files covering European standards comparison, real inspection report benchmarks, AI inspection landscape 2026, DeepInspect vs. European standards gap analysis, and GPT-5 claim validation.
+
+---
+
+## 12. Project Structure
 
 ```
 deepinspect/
@@ -394,6 +460,28 @@ deepinspect/
 |   |   +-- hooks/                       # SSE streaming, health check
 |   +-- tailwind.config.js
 |   +-- package.json
++-- reference/                            # European inspection reference library
+|   +-- standards/                       # EU frameworks (COST TU1406, BRIME, FHWA, Italian 2020)
+|   +-- country-systems/                 # 8 country rating systems (DE/FR/UK/NL/IT/PL/NO/SE)
+|   +-- datasets/                        # Download scripts for open bridge datasets
+|   |   +-- norway-nvdb/fetch_bridges.py # 28,918 Norwegian bridges via REST API
+|   |   +-- codebrim/download.py         # CODEBRIM defect image dataset
+|   |   +-- dacl10k/download.py          # dacl10k 19-class segmentation dataset
+|   |   +-- uk-national-highways/        # UK BCI open data
+|   |   +-- data-europa-eu/              # EU-wide bridge statistics
+|   +-- mappings/                        # Machine-readable score conversion
+|   |   +-- score_mappings.json          # DeepInspect <-> 9 rating systems
+|   |   +-- criteria_to_din1076_svd.json # 11 criteria -> German S/V/D axes
+|   |   +-- defects_to_dacl10k.json      # Visual categories -> dacl10k classes
+|   |   +-- italian_coa_mapping.json     # Criteria -> Italian risk types
+|   +-- methodology/                     # Cross-validation protocol + metrics
+|   +-- papers/                          # Annotated bibliography + BibTeX
++-- research/                            # Analysis & benchmarking
+|   +-- 01-european-inspection-standards.md
+|   +-- 02-real-inspection-reports-benchmarks.md
+|   +-- 03-ai-inspection-landscape-2026.md
+|   +-- 04-deepinspect-vs-european-standards.md
+|   +-- 05-claim-validation-gpt5.md
 +-- DESIGN.md                            # Design system specification
 +-- docker-compose.yml
 +-- README.md
@@ -401,7 +489,7 @@ deepinspect/
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 **Backend returns 500 on `/api/scan`**
 Check the terminal for a specific error. Common causes: invalid API key, Overpass API unreachable (try again in a minute).
