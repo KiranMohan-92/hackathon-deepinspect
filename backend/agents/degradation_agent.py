@@ -155,12 +155,12 @@ def _estimate_remaining_service_life(
     For steel: compare accumulated section loss % vs 20% capacity limit.
     """
     material_lower = (material or "unknown").lower()
-    is_masonry = "masonry" in material_lower
+    is_masonry = any(k in material_lower for k in ("masonry", "brick", "stone"))
     is_concrete = not is_masonry and any(k in material_lower for k in ("concrete", "reinforced", "pre_stressed"))
     is_steel = any(k in material_lower for k in ("steel", "iron", "metal"))
 
     if is_masonry:
-        # Masonry does not have rebar/cover — use empirical weathering estimate
+        # Masonry/brick/stone does not have rebar/cover — use empirical weathering estimate
         weathering_rate_years = 150  # masonry arches typically last 100-200 years
         remaining = max(0, weathering_rate_years - age_years) if age_years else None
         reasoning = (
@@ -251,7 +251,7 @@ async def assess_degradation(
     if age_years:
         material_lower = material.lower()
         is_steel = any(k in material_lower for k in ("steel", "iron", "metal"))
-        is_masonry = "masonry" in material_lower
+        is_masonry = any(k in material_lower for k in ("masonry", "brick", "stone"))
         is_concrete = not is_masonry and any(k in material_lower for k in ("concrete", "reinforced", "pre_stressed"))
 
         if is_steel:

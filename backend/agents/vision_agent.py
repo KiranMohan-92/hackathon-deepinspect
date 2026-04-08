@@ -110,10 +110,15 @@ async def analyze_bridge(
         if candidates:
             fused[opt_field] = max(candidates, key=lambda x: x[1])[0]
 
-    # Compute overall from fused required scores
-    fused_scores = [fused[k].score for k in ("cracking", "spalling", "corrosion",
-                    "surface_degradation", "drainage", "structural_deformation")]
-    fused_overall = max(fused_scores)
+    # Compute overall from ALL fused scores (required + optional)
+    all_scores = [fused[k].score for k in ("cracking", "spalling", "corrosion",
+                  "surface_degradation", "drainage", "structural_deformation")]
+    for opt_field in ("pier_condition", "abutment_condition", "fatigue_cracking",
+                      "section_loss", "bearing_condition", "joint_condition",
+                      "railing_condition", "protective_systems"):
+        if opt_field in fused:
+            all_scores.append(fused[opt_field].score)
+    fused_overall = max(all_scores)
 
     # Compute component summaries
     sub_scores = [fused[k].score for k in ("pier_condition", "abutment_condition")

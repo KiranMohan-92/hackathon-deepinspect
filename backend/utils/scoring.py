@@ -398,7 +398,7 @@ def compute_criterion_scores(
         requires_field_verification=True,
         field_verification_scope="SHM sensors or surveying needed for actual deflection/frequency measurement",
         failure_mode_probability=_score_to_probability(c10_score),
-        data_sources_used=["Street View vision (deformation proxy)"],
+        data_sources_used=["Street View vision (deformation proxy)"] if visual else [],
     ))
 
     # ── Criterion 11: Ancillary / Protective Systems ─────────────────

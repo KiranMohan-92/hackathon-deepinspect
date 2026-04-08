@@ -132,9 +132,11 @@ async def analyze_bridge_detail(osm_id: str, summary: BridgeSummary, req: Reques
     async def run():
         try:
             report = await run_single_analysis(summary, progress_callback=on_progress)
-            await queue.put(
-                {"type": "complete", "report": json.loads(report.model_dump_json())}
-            )
+            report_data = json.loads(report.model_dump_json())
+            report_data.pop("thinking_steps", None)
+            if report_data.get("certificate"):
+                report_data["certificate"].pop("thinking_steps", None)
+            await queue.put({"type": "complete", "report": report_data})
             log_audit(
                 action="analyze",
                 bridge_id=osm_id,
