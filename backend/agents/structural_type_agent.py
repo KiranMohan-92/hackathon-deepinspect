@@ -44,7 +44,7 @@ GIRDER_TO_REDUNDANCY_KEY: dict[str, str] = {
 
 # Map vision structure_system → REDUNDANCY_TABLE key (fallback when no girder info)
 SYSTEM_TO_REDUNDANCY_KEY: dict[str, str] = {
-    "beam":          "multi_girder",  # assume multi until proven otherwise
+    "beam":          "unknown",       # unresolved beam = unknown, not assumed multi-girder
     "truss":         "truss",
     "arch":          "arch_deck",
     "cable_stayed":  "cable_stayed",

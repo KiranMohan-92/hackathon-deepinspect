@@ -47,7 +47,12 @@ class PhysicsHealthCertificate(BaseModel):
     # Traceability
     data_sources_summary: list[str] = []
     assessment_limitations: list[str] = []
-    generated_at: datetime = datetime.now()
+    generated_at: datetime = None
+
+    def __init__(self, **data):
+        if data.get("generated_at") is None:
+            data["generated_at"] = datetime.utcnow()
+        super().__init__(**data)
     model_version: str = "3.0.0"
     thinking_steps: list[str] = []
 

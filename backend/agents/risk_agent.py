@@ -25,9 +25,65 @@ async def generate_report(
     progress_callback=None,
 ) -> BridgeRiskReport:
     ctx = context or BridgeContext()
-    base_score = compute_base_risk_score(visual, ctx)
-    legacy_tier = score_to_tier(base_score)
+    per_heading = per_heading_assessments or {}
 
+    # ── Step 1: Compute certificate FIRST so narrative uses authoritative score ──
+    cert = None
+    authoritative_score = None
+    authoritative_tier = None
+    try:
+        criteria = compute_criterion_scores(visual, ctx, scour, structural, degradation)
+        overall_score, overall_conf = compute_weighted_risk_score(criteria)
+        authoritative_score = round(overall_score, 2)
+        authoritative_tier = score_to_tier(overall_score)
+
+        priority_field = [
+            c.field_verification_scope
+            for c in criteria
+            if c.requires_field_verification and c.field_verification_scope
+        ]
+
+        all_sources: list[str] = []
+        for c in criteria:
+            for src in c.data_sources_used:
+                if src not in all_sources:
+                    all_sources.append(src)
+
+        limitations = [
+            f"Criterion '{c.criterion_name}' assessed at low confidence — field verification required"
+            for c in criteria
+            if c.confidence == "low" and c.requires_field_verification
+        ]
+
+        cert = PhysicsHealthCertificate(
+            bridge_id=bridge.osm_id,
+            bridge_name=bridge.name,
+            lat=bridge.lat,
+            lon=bridge.lon,
+            overall_risk_score=authoritative_score,
+            overall_risk_tier=authoritative_tier,
+            overall_confidence=overall_conf,
+            criteria_results=criteria,
+            priority_field_inspections=priority_field,
+            estimated_remaining_service_life_years=(
+                degradation.estimated_remaining_service_life_years if degradation else None
+            ),
+            data_sources_summary=all_sources,
+            assessment_limitations=limitations,
+            generated_at=datetime.utcnow(),
+        )
+    except Exception as e:
+        import traceback
+        print(f"[RiskAgent] CERTIFICATE BUILD FAILED for bridge {bridge.osm_id}: {e}")
+        traceback.print_exc()
+
+    # Fall back to legacy scoring if certificate failed
+    if authoritative_score is None:
+        base_score = compute_base_risk_score(visual, ctx)
+        authoritative_score = round(base_score, 1)
+        authoritative_tier = score_to_tier(base_score)
+
+    # ── Step 2: Generate narrative using the AUTHORITATIVE score/tier ────────────
     narrative = {
         "condition_summary": "Automated assessment unavailable. Manual review required.",
         "key_risk_factors": ["Assessment failed — manual review required"],
@@ -43,15 +99,14 @@ async def generate_report(
             lon=bridge.lon,
             visual_assessment_json=visual.model_dump_json() if visual else "{}",
             context_json=ctx.model_dump_json(),
-            base_score=round(base_score, 1),
-            tier=legacy_tier,
+            base_score=authoritative_score,
+            tier=authoritative_tier,
         )
         response = text_model.generate_content(prompt, generation_config=narrative_config)
         narrative = json.loads(response.text)
-        # Print thinking steps to terminal and emit via callback
         steps = narrative.get("thinking_steps", [])
         if steps:
-            print(f"\n[RiskAgent] Thinking — {bridge.name or bridge.osm_id} (score={round(base_score,1)}, tier={legacy_tier}):")
+            print(f"\n[RiskAgent] Thinking — {bridge.name or bridge.osm_id} (score={authoritative_score}, tier={authoritative_tier}):")
             for i, step in enumerate(steps, 1):
                 print(f"  [{i}] {step}")
             if progress_callback:
@@ -64,72 +119,19 @@ async def generate_report(
     except Exception as e:
         print(f"[RiskAgent] Error for bridge {bridge.osm_id}: {e}")
 
-    per_heading = per_heading_assessments or {}
-    # Remove thinking_steps from narrative dict before splatting — pass it explicitly
     report_thinking = narrative.pop("thinking_steps", [])
 
-    # Build Physics Health Certificate using multi-criteria scoring
-    cert = None
-    try:
-        criteria = compute_criterion_scores(visual, ctx, scour, structural, degradation)
-        overall_score, overall_conf = compute_weighted_risk_score(criteria)
-
-        # Collect priority field inspections from criteria that require it
-        priority_field = [
-            c.field_verification_scope
-            for c in criteria
-            if c.requires_field_verification and c.field_verification_scope
-        ]
-
-        # Collect data sources across all criteria
-        all_sources: list[str] = []
-        for c in criteria:
-            for src in c.data_sources_used:
-                if src not in all_sources:
-                    all_sources.append(src)
-
-        # Collect assessment limitations for criteria with low confidence
-        limitations = [
-            f"Criterion '{c.criterion_name}' assessed at low confidence — field verification required"
-            for c in criteria
-            if c.confidence == "low" and c.requires_field_verification
-        ]
-
-        cert = PhysicsHealthCertificate(
-            bridge_id=bridge.osm_id,
-            bridge_name=bridge.name,
-            lat=bridge.lat,
-            lon=bridge.lon,
-            overall_risk_score=round(overall_score, 2),
-            overall_risk_tier=score_to_tier(overall_score),
-            overall_confidence=overall_conf,
-            criteria_results=criteria,
-            recommended_action=narrative.get("recommended_action", "Manual inspection required"),
-            priority_field_inspections=priority_field,
-            estimated_remaining_service_life_years=(
-                degradation.estimated_remaining_service_life_years if degradation else None
-            ),
-            data_sources_summary=all_sources,
-            assessment_limitations=limitations,
-            generated_at=datetime.utcnow(),
-            condition_summary=narrative.get("condition_summary", ""),
-            key_risk_factors=narrative.get("key_risk_factors", []),
-            maintenance_notes=narrative.get("maintenance_notes", []),
-            confidence_caveat=narrative.get("confidence_caveat", ""),
-        )
-    except Exception as e:
-        import traceback
-        print(f"[RiskAgent] CERTIFICATE BUILD FAILED for bridge {bridge.osm_id}: {e}")
-        traceback.print_exc()
-
-    # Use certificate score as authoritative when available; fall back to legacy
+    # ── Step 3: Update certificate with narrative fields ─────────────────────────
     if cert:
-        authoritative_score = cert.overall_risk_score
-        authoritative_tier = cert.overall_risk_tier
-    else:
-        authoritative_score = round(base_score, 1)
-        authoritative_tier = legacy_tier
+        cert = cert.model_copy(update={
+            "recommended_action": narrative.get("recommended_action", cert.recommended_action),
+            "condition_summary": narrative.get("condition_summary", ""),
+            "key_risk_factors": narrative.get("key_risk_factors", []),
+            "maintenance_notes": narrative.get("maintenance_notes", []),
+            "confidence_caveat": narrative.get("confidence_caveat", ""),
+        })
 
+    # ── Step 4: Assemble report ─────────────────────────────────────────────────
     try:
         return BridgeRiskReport(
             bridge_id=bridge.osm_id,

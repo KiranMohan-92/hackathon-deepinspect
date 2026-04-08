@@ -57,7 +57,8 @@ async def _try_endpoint(client: httpx.AsyncClient, url: str, query: str) -> list
             "lon": el["center"]["lon"],
             "name": tags.get("name"),
             "start_date": tags.get("start_date"),
-            "material": tags.get("bridge:structure") or tags.get("material"),
+            "material": tags.get("material"),
+            "bridge_structure": tags.get("bridge:structure"),
             "maxweight": tags.get("maxweight"),
             "road_class": tags.get("highway"),
         })
