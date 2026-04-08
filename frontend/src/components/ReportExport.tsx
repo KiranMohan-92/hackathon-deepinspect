@@ -32,7 +32,7 @@ async function fetchFont(url) {
   }
 }
 
-const ROBOTO = "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/roboto/static";
+const ROBOTO = "https://cdn.jsdelivr.net/gh/google/fonts@3a87e65bdd1be6a41a4e38eb1e08cfa46a4d98e2/apache/roboto/static";
 
 async function ensureFonts(doc) {
   // Load fonts only once per session
@@ -1203,6 +1203,7 @@ async function buildImageryPages(doc, bridge, F) {
 
 async function buildPdf(bridge) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const sectionErrors: string[] = [];
 
   // F = 'Roboto' (Unicode, supports Polish) or 'helvetica' if offline
   const F   = await ensureFonts(doc);
@@ -1214,6 +1215,7 @@ async function buildPdf(bridge) {
     buildCoverPage(doc, bridge, cert, F, rid);
   } catch (e) {
     console.error("[PDF] Cover page error:", e);
+    sectionErrors.push("Cover page");
   }
 
   // ── PAGE 2: 11-Criterion Assessment Table (only if certificate present) ───
@@ -1222,6 +1224,7 @@ async function buildPdf(bridge) {
       buildCriteriaTablePage(doc, cert, F);
     } catch (e) {
       console.error("[PDF] Criteria table error:", e);
+      sectionErrors.push("Criteria table");
     }
   }
 
@@ -1231,6 +1234,7 @@ async function buildPdf(bridge) {
       buildCriterionDetailsPage(doc, cert, F);
     } catch (e) {
       console.error("[PDF] Criterion details error:", e);
+      sectionErrors.push("Criterion details");
     }
   }
 
@@ -1269,6 +1273,7 @@ async function buildPdf(bridge) {
     }
   } catch (e) {
     console.error("[PDF] Field inspection page error:", e);
+    sectionErrors.push("Field inspection");
   }
 
   // ── PAGE 5+: Street View Imagery & Defect Analysis ───────────────────────
@@ -1276,6 +1281,7 @@ async function buildPdf(bridge) {
     await buildImageryPages(doc, bridge, F);
   } catch (e) {
     console.error("[PDF] Imagery pages error:", e);
+    sectionErrors.push("Imagery");
   }
 
   // ── Footer on every page ──────────────────────────────────────────────────
@@ -1285,6 +1291,7 @@ async function buildPdf(bridge) {
   }
 
   doc.save(`deepinspect-${bridge.bridge_id}.pdf`);
+  return { errors: sectionErrors };
 }
 
 // ─── Button component ─────────────────────────────────────────────────────────
@@ -1297,11 +1304,17 @@ export default function ReportExport({ bridge }) {
     setLoading(true);
     setDone(false);
     try {
-      await buildPdf(bridge);
+      const result = await buildPdf(bridge);
       setDone(true);
-      toast.success("PDF report downloaded", {
-        description: bridge.bridge_name || `Bridge ${bridge.bridge_id}`,
-      });
+      if (result?.errors?.length > 0) {
+        toast.warning("PDF exported with issues", {
+          description: `Missing sections: ${result.errors.join(", ")}`,
+        });
+      } else {
+        toast.success("PDF report downloaded", {
+          description: bridge.bridge_name || `Bridge ${bridge.bridge_id}`,
+        });
+      }
       setTimeout(() => setDone(false), 2000);
     } catch (err) {
       console.error("PDF generation error:", err);

@@ -84,22 +84,13 @@ def _parse_raw(raw: list[dict]) -> list[BridgeSummary]:
     # Sort by priority descending so we always keep the highest-priority representative
     summaries.sort(key=lambda s: s.priority_score, reverse=True)
 
-    # Pass 1 — name dedup: same non-empty name → same physical bridge
-    seen_names: set[str] = set()
-    named_deduped: list[BridgeSummary] = []
-    for s in summaries:
-        key = s.name.strip().lower() if s.name else None
-        if key and key in seen_names:
-            continue
-        if key:
-            seen_names.add(key)
-        named_deduped.append(s)
-
-    # Pass 2 — proximity dedup: catches unnamed parallel spans / dual carriageways
-    deduped: list[BridgeSummary] = []
-    for candidate in named_deduped:
+    # Pass 1 — proximity dedup first: catches parallel spans / dual carriageways.
+    # Doing this before name dedup prevents distinct bridges sharing a common name
+    # (e.g. "Railway Bridge") from being silently merged when they are far apart.
+    proximity_deduped: list[BridgeSummary] = []
+    for candidate in summaries:
         too_close = False
-        for kept in deduped:
+        for kept in proximity_deduped:
             dlat = math.radians(candidate.lat - kept.lat)
             dlon = math.radians(candidate.lon - kept.lon)
             a = (math.sin(dlat / 2) ** 2
@@ -111,7 +102,39 @@ def _parse_raw(raw: list[dict]) -> list[BridgeSummary]:
                 too_close = True
                 break
         if not too_close:
-            deduped.append(candidate)
+            proximity_deduped.append(candidate)
+
+    # Pass 2 — name dedup only within tight proximity (< 200 m).
+    # Same-named bridges that survived the spatial pass are only merged if they
+    # are genuinely close — this handles OSM ways that model the same structure
+    # from different directions without removing distant same-named bridges.
+    NAME_PROXIMITY_M = 200
+    seen_names: set[str] = set()
+    deduped: list[BridgeSummary] = []
+    for candidate in proximity_deduped:
+        key = candidate.name.strip().lower() if candidate.name else None
+        if key and key in seen_names:
+            # Only skip if there is already a kept bridge with the same name
+            # within NAME_PROXIMITY_M — otherwise allow it through.
+            close_namesake = False
+            for kept in deduped:
+                if (kept.name or "").strip().lower() != key:
+                    continue
+                dlat = math.radians(candidate.lat - kept.lat)
+                dlon = math.radians(candidate.lon - kept.lon)
+                a = (math.sin(dlat / 2) ** 2
+                     + math.cos(math.radians(kept.lat))
+                     * math.cos(math.radians(candidate.lat))
+                     * math.sin(dlon / 2) ** 2)
+                dist_m = 6_371_000 * 2 * math.asin(math.sqrt(a))
+                if dist_m < NAME_PROXIMITY_M:
+                    close_namesake = True
+                    break
+            if close_namesake:
+                continue
+        if key:
+            seen_names.add(key)
+        deduped.append(candidate)
 
     return deduped
 

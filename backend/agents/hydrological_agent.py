@@ -25,6 +25,7 @@ SCOUR_VISION_PROMPT = Path("prompts/scour_vision_prompt.txt").read_text()
 async def assess_scour(
     bridge: BridgeTarget,
     progress_callback=None,
+    prefetched_images: dict | None = None,
 ) -> ScourAssessment:
     """
     Run full scour / foundation / channel-stability assessment for a bridge.
@@ -33,6 +34,9 @@ async def assess_scour(
       1. OSM waterway proximity (Overpass)
       2. Flood zone classification
       3. Gemini Vision analysis of Street View imagery for scour indicators
+
+    If prefetched_images is provided, use it instead of calling fetch_bridge_images()
+    (avoids duplicate API calls when the orchestrator pre-fetches for all agents).
     """
 
     async def emit(step: str):
@@ -47,15 +51,15 @@ async def assess_scour(
     data_sources: list[str] = []
 
     # ── 1. Query OSM for nearby waterways ────────────────────────────────────
-    await emit("Querying OSM Overpass for waterways within 500 m…")
+    await emit("Querying OSM Overpass for waterways within 100 m…")
     waterways: list[dict] = []
     try:
-        waterways = await check_waterway_proximity(bridge.lat, bridge.lon, radius_m=500)
+        waterways = await check_waterway_proximity(bridge.lat, bridge.lon, radius_m=100)
         if waterways:
             data_sources.append("OpenStreetMap Overpass (waterway tags)")
             await emit(f"Found {len(waterways)} waterway element(s) near bridge.")
         else:
-            await emit("No waterways found within 500 m via OSM.")
+            await emit("No waterways found within 100 m via OSM.")
     except Exception as e:
         await emit(f"OSM waterway query failed: {str(e)[:80]}")
 
@@ -86,14 +90,17 @@ async def assess_scour(
     # ── 3. Gemini Vision — scour indicators in Street View imagery ───────────
     vision_result: dict = {}
     if bridge.street_view_available:
-        await emit("Fetching Street View imagery for scour visual analysis…")
-        try:
-            images_by_heading = await fetch_bridge_images(
-                bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
-            )
-        except Exception as e:
-            await emit(f"Street View fetch failed: {str(e)[:80]}")
-            images_by_heading = {}
+        if prefetched_images is not None:
+            images_by_heading = prefetched_images
+        else:
+            await emit("Fetching Street View imagery for scour visual analysis…")
+            try:
+                images_by_heading = await fetch_bridge_images(
+                    bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
+                )
+            except Exception as e:
+                await emit(f"Street View fetch failed: {str(e)[:80]}")
+                images_by_heading = {}
 
         if images_by_heading:
             await emit(f"Analysing {len(images_by_heading)} image(s) for scour indicators…")

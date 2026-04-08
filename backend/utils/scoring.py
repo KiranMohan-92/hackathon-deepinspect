@@ -234,7 +234,7 @@ def compute_criterion_scores(
         requires_field_verification=c4_score >= 3.0,
         field_verification_scope="Close-range substructure inspection for crack mapping and settlement survey" if c4_score >= 3.0 else None,
         failure_mode_probability=_score_to_probability(c4_score),
-        data_sources_used=["Street View vision analysis"],
+        data_sources_used=["Street View vision analysis"] if visual else [],
     ))
 
     # ── Criterion 5: Superstructure Primary Elements ─────────────────
@@ -267,7 +267,7 @@ def compute_criterion_scores(
         requires_field_verification=c5_score >= 3.5,
         field_verification_scope="NDT inspection for fatigue crack characterization" if c5_score >= 3.5 else None,
         failure_mode_probability=_score_to_probability(c5_score),
-        data_sources_used=["Street View vision analysis"],
+        data_sources_used=["Street View vision analysis"] if visual else [],
     ))
 
     # ── Criterion 6: Overall Stability ───────────────────────────────
@@ -290,7 +290,7 @@ def compute_criterion_scores(
         key_findings=c6_findings,
         requires_field_verification=c6_score >= 3.0,
         failure_mode_probability=_score_to_probability(c6_score),
-        data_sources_used=["Street View vision", "Structural type classification"],
+        data_sources_used=(["Street View vision"] if visual else []) + (["Structural type classification"] if structural else []),
     ))
 
     # ── Criterion 7: Durability / Degradation ────────────────────────
@@ -351,7 +351,7 @@ def compute_criterion_scores(
         confidence=c8_conf,
         key_findings=c8_findings,
         failure_mode_probability=_score_to_probability(c8_score),
-        data_sources_used=["Street View vision analysis"],
+        data_sources_used=["Street View vision analysis"] if visual else [],
     ))
 
     # ── Criterion 9: Deck / Slab / Wearing Surface ──────────────────
@@ -376,7 +376,7 @@ def compute_criterion_scores(
         confidence=c9_conf,
         key_findings=c9_findings,
         failure_mode_probability=_score_to_probability(c9_score),
-        data_sources_used=["Street View vision analysis"],
+        data_sources_used=["Street View vision analysis"] if visual else [],
     ))
 
     # ── Criterion 10: Stiffness / Serviceability ─────────────────────
@@ -425,7 +425,7 @@ def compute_criterion_scores(
         confidence=c11_conf,
         key_findings=c11_findings,
         failure_mode_probability=_score_to_probability(c11_score),
-        data_sources_used=["Street View vision analysis"],
+        data_sources_used=["Street View vision analysis"] if visual else [],
     ))
 
     return results

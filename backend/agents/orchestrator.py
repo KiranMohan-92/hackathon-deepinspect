@@ -7,6 +7,7 @@ from agents.risk_agent import generate_report
 from agents.hydrological_agent import assess_scour
 from agents.structural_type_agent import assess_structural_type
 from agents.degradation_agent import assess_degradation
+from services.streetview_service import fetch_bridge_images
 from config import settings
 
 
@@ -24,15 +25,25 @@ async def run_single_analysis(summary: BridgeSummary, progress_callback=None) ->
     bridge = summary_to_target(summary)
     print(f"[Orchestrator] Analysing bridge {bridge.osm_id} ({bridge.name or 'unnamed'})")
 
-    # Step 1: Vision + Context + Hydrological in parallel
+    # Pre-fetch Street View images once — shared by Vision, Hydrological, and StructuralType agents
+    images_by_heading: dict = {}
+    if bridge.street_view_available:
+        try:
+            images_by_heading = await fetch_bridge_images(
+                bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
+            )
+        except Exception as e:
+            print(f"[Orchestrator] Street View pre-fetch failed for {bridge.osm_id}: {e}")
+
+    # Step 1: Vision + Context + Hydrological in parallel (all share pre-fetched images)
     (visual, per_heading), ctx, scour = await asyncio.gather(
-        analyze_bridge(bridge, progress_callback=progress_callback),
+        analyze_bridge(bridge, progress_callback=progress_callback, prefetched_images=images_by_heading),
         get_bridge_context(bridge, progress_callback=progress_callback),
-        _safe_assess_scour(bridge, progress_callback),
+        _safe_assess_scour(bridge, progress_callback, prefetched_images=images_by_heading),
     )
 
     # Step 2: Structural type (needs vision + context results)
-    structural = await _safe_assess_structural_type(bridge, visual, ctx, progress_callback)
+    structural = await _safe_assess_structural_type(bridge, visual, ctx, progress_callback, prefetched_images=images_by_heading)
 
     # Step 3: Degradation (needs context + vision)
     degradation = await _safe_assess_degradation(bridge, ctx, visual, progress_callback)
@@ -49,20 +60,20 @@ async def run_single_analysis(summary: BridgeSummary, progress_callback=None) ->
     return report
 
 
-async def _safe_assess_scour(bridge, progress_callback):
+async def _safe_assess_scour(bridge, progress_callback, prefetched_images: dict | None = None):
     """Run HydrologicalAgent; return None on failure to keep pipeline running."""
     try:
-        return await assess_scour(bridge, progress_callback=progress_callback)
+        return await assess_scour(bridge, progress_callback=progress_callback, prefetched_images=prefetched_images)
     except Exception as e:
         print(f"[Orchestrator] HydrologicalAgent failed for {bridge.osm_id}: {e}")
         return None
 
 
-async def _safe_assess_structural_type(bridge, visual, context, progress_callback):
+async def _safe_assess_structural_type(bridge, visual, context, progress_callback, prefetched_images: dict | None = None):
     """Run StructuralTypeAgent; return None on failure to keep pipeline running."""
     try:
         return await assess_structural_type(
-            bridge, visual, context, progress_callback=progress_callback
+            bridge, visual, context, progress_callback=progress_callback, prefetched_images=prefetched_images
         )
     except Exception as e:
         print(f"[Orchestrator] StructuralTypeAgent failed for {bridge.osm_id}: {e}")

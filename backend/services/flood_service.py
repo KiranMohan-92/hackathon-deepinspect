@@ -53,7 +53,7 @@ out body;
 async def check_waterway_proximity(
     lat: float,
     lon: float,
-    radius_m: int = 500,
+    radius_m: int = 100,
 ) -> list[dict]:
     """
     Query OSM Overpass for waterways within *radius_m* metres of (lat, lon).
@@ -114,13 +114,20 @@ def classify_flood_risk(
 
     Returns one of: "HIGH", "MEDIUM", "LOW", "UNKNOWN".
 
-    Logic:
-      - Any river within 100 m → HIGH
-      - Any river within 500 m → HIGH
-      - Any stream within 250 m → HIGH (upgraded from MEDIUM due to proximity)
-      - Any stream beyond 250 m → MEDIUM
+    Logic (radius is now 100 m — bridges crossing water have waterways within 100 m):
+      - Any river / tidal_channel / wadi within 100 m → HIGH
+      - Any stream / brook / millstream within 100 m → MEDIUM
+        (stream alone is not HIGH; proximity ≤ 100 m is a strong signal only for
+         major waterways — a stream within 100 m of a bridge center is notable
+         but does not automatically warrant the same urgency as a river crossing)
       - canal / drain / ditch → LOW
       - No waterways found → UNKNOWN
+
+    Confidence note:
+      If the bridge OSM record includes bridge=yes AND a waterway is within 100 m,
+      that is a strong signal the bridge actively crosses water (HIGH confidence).
+      If the bridge merely sits near a waterway with no bridge tag, confidence in
+      the flood-risk classification should be treated as lower.
     """
     if not waterways:
         return "UNKNOWN"
@@ -129,19 +136,16 @@ def classify_flood_risk(
 
     for w in waterways:
         wtype = (w.get("waterway_type") or "").lower()
-        distance = w.get("distance_m")  # may be None
 
         base_risk, _ = _WATERWAY_RISK.get(wtype, ("LOW", 2.0))
 
-        # Proximity upgrade for streams: if we can't determine exact distance
-        # we treat proximity conservatively (Overpass already filtered to radius).
-        if wtype == "stream":
-            # distance_m is None because Overpass doesn't return it; assume within
-            # radius which is <= 500 m, so apply MEDIUM → HIGH if within 250 m
-            # We can't distinguish, so conservatively upgrade stream → HIGH
+        if wtype in ("river", "tidal_channel", "wadi"):
             effective_risk = "HIGH"
-        elif wtype in ("river", "tidal_channel", "wadi"):
-            effective_risk = "HIGH"
+        elif wtype in ("stream", "brook", "millstream"):
+            # Within 100 m query radius — treat as MEDIUM, not HIGH.
+            # Removing the old "conservatively upgrade stream → HIGH" logic:
+            # a stream within 100 m matters but is not equivalent to a river crossing.
+            effective_risk = "MEDIUM"
         else:
             effective_risk = base_risk
 

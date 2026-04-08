@@ -175,12 +175,16 @@ async def assess_structural_type(
     visual_assessment: VisualAssessment | None = None,
     context: BridgeContext | None = None,
     progress_callback=None,
+    prefetched_images: dict | None = None,
 ) -> StructuralTypeAssessment:
     """
     Classify structural type from Street View imagery + OSM metadata, then
     derive redundancy class, capacity class, and stability concerns.
 
     Covers criteria #2 (Redundancy), #3 (Capacity), #6 (Stability).
+
+    If prefetched_images is provided, use it instead of calling fetch_bridge_images()
+    (avoids duplicate API calls when the orchestrator pre-fetches for all agents).
     """
 
     async def _emit(step: str) -> None:
@@ -198,9 +202,12 @@ async def assess_structural_type(
     data_sources: list[str] = []
 
     if bridge.street_view_available:
-        images_by_heading = await fetch_bridge_images(
-            bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
-        )
+        if prefetched_images is not None:
+            images_by_heading = prefetched_images
+        else:
+            images_by_heading = await fetch_bridge_images(
+                bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
+            )
         if images_by_heading:
             # Use the first available heading for structure classification.
             # Multiple headings mostly duplicate the structural information.

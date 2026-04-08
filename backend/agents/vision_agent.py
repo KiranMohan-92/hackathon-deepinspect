@@ -17,17 +17,24 @@ PerHeadingMap = dict[str, VisualAssessment]
 async def analyze_bridge(
     bridge: BridgeTarget,
     progress_callback=None,
+    prefetched_images: dict | None = None,
 ) -> tuple[VisualAssessment | None, PerHeadingMap]:
     """
     Analyze each heading image separately so defect bounding boxes are
     image-specific. Returns (overall_assessment, {str(heading): assessment}).
+
+    If prefetched_images is provided, use it instead of calling fetch_bridge_images()
+    (avoids duplicate API calls when the orchestrator pre-fetches for all agents).
     """
     if not bridge.street_view_available:
         return None, {}
 
-    images_by_heading = await fetch_bridge_images(
-        bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
-    )
+    if prefetched_images is not None:
+        images_by_heading = prefetched_images
+    else:
+        images_by_heading = await fetch_bridge_images(
+            bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
+        )
     if not images_by_heading:
         return None, {}
 
