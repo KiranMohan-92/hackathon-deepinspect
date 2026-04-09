@@ -9,7 +9,7 @@ import json
 from agents.orchestrator import run_single_analysis
 from agents.discovery_agent import run_discovery
 from config import settings
-from db.base import get_session
+from db.base import get_session, async_session_factory
 from db import repository as repo
 from models.bridge import BridgeRiskReport, BridgeSummary, ScanRequest
 from utils.errors import APIError, ErrorCode, error_response
@@ -140,6 +140,32 @@ async def analyze_bridge_detail(osm_id: str, summary: BridgeSummary, req: Reques
             if report_data.get("certificate"):
                 report_data["certificate"].pop("thinking_steps", None)
             await queue.put({"type": "complete", "report": report_data})
+
+            # Persist bridge + assessment to database
+            try:
+                async with async_session_factory() as session:
+                    await repo.save_bridge(
+                        session, osm_id=osm_id, name=summary.name,
+                        lat=summary.lat, lon=summary.lon,
+                        road_class=summary.road_class,
+                        material=summary.material,
+                        construction_year=summary.construction_year,
+                        max_weight_tons=summary.max_weight_tons,
+                    )
+                    cert_json = report_data.get("certificate")
+                    await repo.save_assessment(
+                        session, bridge_id=osm_id,
+                        risk_score=report.risk_score,
+                        risk_tier=report.risk_tier,
+                        confidence=report.certificate.overall_confidence if report.certificate else None,
+                        certificate_json=cert_json,
+                        report_json=report_data,
+                    )
+                    await session.commit()
+            except Exception as db_err:
+                from services.logging_service import get_logger
+                get_logger(__name__).warning("db_persist_failed", bridge_id=osm_id, error=str(db_err))
+
             log_audit(
                 action="analyze",
                 bridge_id=osm_id,

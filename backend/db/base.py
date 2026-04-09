@@ -2,6 +2,7 @@
 Database engine and session factory.
 Supports async SQLAlchemy with both PostgreSQL (production) and SQLite (demo mode).
 """
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -39,6 +40,14 @@ elif not DATABASE_URL.startswith("sqlite"):
 
 engine = create_async_engine(DATABASE_URL, **engine_kwargs)
 
+# Enable FK enforcement for SQLite (disabled by default)
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_fk_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -47,9 +56,14 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_session() -> AsyncSession:
-    """Dependency for FastAPI endpoints."""
+    """Dependency for FastAPI endpoints. Auto-commits on success, rolls back on error."""
     async with async_session_factory() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 async def init_db():
