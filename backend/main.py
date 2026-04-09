@@ -27,11 +27,17 @@ from utils.security import (
     validate_file_upload,
 )
 from utils.audit import AuditMiddleware, log_audit, get_audit_logs
+from services.logging_service import setup_logging, get_logger
+from middleware.request_logging import RequestLoggingMiddleware
 from api.v1 import router as v1_router
+
+# Initialize structured logging before anything else
+setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+log = get_logger(__name__)
 
 missing_keys = settings.validate_required_keys()
 if missing_keys:
-    print(f"WARNING: Missing required environment variables: {', '.join(missing_keys)}")
+    log.warning("missing_required_keys", keys=missing_keys)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -66,6 +72,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(AuditMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(APIKeyMiddleware)

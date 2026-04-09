@@ -9,7 +9,10 @@ from models.scour import ScourAssessment
 from models.structural_type import StructuralTypeAssessment
 from models.degradation import DegradationAssessment
 from services.gemini_service import text_model, narrative_config
+from services.logging_service import get_logger
 from utils.scoring import compute_base_risk_score, score_to_tier, compute_criterion_scores, compute_weighted_risk_score
+
+log = get_logger(__name__)
 
 REPORT_PROMPT_TEMPLATE = Path("prompts/risk_report_prompt.txt").read_text()
 
@@ -73,9 +76,7 @@ async def generate_report(
             generated_at=datetime.utcnow(),
         )
     except Exception as e:
-        import traceback
-        print(f"[RiskAgent] CERTIFICATE BUILD FAILED for bridge {bridge.osm_id}: {e}")
-        traceback.print_exc()
+        log.error("certificate_build_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
 
     # Fall back to legacy scoring if certificate failed
     if authoritative_score is None:
@@ -106,9 +107,24 @@ async def generate_report(
         narrative = json.loads(response.text)
         steps = narrative.get("thinking_steps", [])
         if steps:
-            print(f"\n[RiskAgent] Thinking — {bridge.name or bridge.osm_id} (score={authoritative_score}, tier={authoritative_tier}):")
+            log.info(
+                "thinking_steps",
+                bridge_id=bridge.osm_id,
+                bridge_name=bridge.name,
+                score=authoritative_score,
+                tier=authoritative_tier,
+                step_count=len(steps),
+            )
             for i, step in enumerate(steps, 1):
-                print(f"  [{i}] {step}")
+                log.info(
+                    "thinking_step",
+                    bridge_id=bridge.osm_id,
+                    bridge_name=bridge.name,
+                    score=authoritative_score,
+                    tier=authoritative_tier,
+                    step_index=i,
+                    step=step,
+                )
             if progress_callback:
                 for step in steps:
                     await progress_callback({
@@ -117,7 +133,7 @@ async def generate_report(
                         "step": step,
                     })
     except Exception as e:
-        print(f"[RiskAgent] Error for bridge {bridge.osm_id}: {e}")
+        log.error("narrative_generation_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
 
     report_thinking = narrative.pop("thinking_steps", [])
 
@@ -152,7 +168,7 @@ async def generate_report(
             **narrative,
         )
     except Exception as e:
-        print(f"[RiskAgent] Report construction error for bridge {bridge.osm_id}: {e}")
+        log.error("report_construction_error", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
         return BridgeRiskReport(
             bridge_id=bridge.osm_id,
             bridge_name=bridge.name,

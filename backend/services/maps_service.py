@@ -1,5 +1,9 @@
 import httpx
 
+from services.logging_service import get_logger
+
+log = get_logger(__name__)
+
 
 async def bbox_from_city(city: str, api_key: str) -> dict:
     """
@@ -14,7 +18,7 @@ async def bbox_from_city(city: str, api_key: str) -> dict:
             if bounds:
                 return bounds
         except Exception as e:
-            print(f"[MapsService] Google geocoding failed ({e}), falling back to Nominatim")
+            log.warning("google_geocoding_failed", city=city, error=str(e))
 
     # 2. Fallback: Nominatim (OpenStreetMap) — free, no key required
     return await _nominatim_geocode(city)

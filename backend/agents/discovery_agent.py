@@ -2,10 +2,13 @@ import math
 
 from services.overpass_service import get_bridges_in_bbox
 from services.maps_service import bbox_from_city
+from services.logging_service import get_logger
 from models.bridge import BridgeSummary, BridgeTarget, BboxRequest
 from config import settings
 from typing import Optional
 from datetime import datetime
+
+log = get_logger(__name__)
 
 # Two bridges closer than this (metres) are treated as the same physical structure.
 # 75 m covers dual-carriageway motorway bridges whose way-centres sit 40–70 m apart.
@@ -146,7 +149,7 @@ async def run_discovery(
     on_progress=None,
 ) -> list[BridgeSummary]:
     async def emit(step: str, status: str, message: str):
-        print(f"[Discovery] {message}")
+        log.info("discovery", step=step, status=status, message=message)
         if on_progress:
             await on_progress({"step": step, "status": status, "message": message})
 

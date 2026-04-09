@@ -2,8 +2,11 @@ import json
 from pathlib import Path
 from datetime import datetime
 from services.gemini_service import text_model, json_config
+from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.context import BridgeContext
+
+log = get_logger(__name__)
 
 CONTEXT_PROMPT_TEMPLATE = Path("prompts/context_prompt.txt").read_text()
 CURRENT_YEAR = datetime.now().year
@@ -28,12 +31,23 @@ async def get_bridge_context(bridge: BridgeTarget, progress_callback=None) -> Br
     try:
         response = text_model.generate_content(prompt, generation_config=json_config)
         data = json.loads(response.text)
-        # Print thinking steps to terminal and emit via callback
+        # Log thinking steps and emit via callback
         steps = data.get("thinking_steps", [])
         if steps:
-            print(f"\n[ContextAgent] 🧠 Thinking — {bridge.name or bridge.osm_id}:")
+            log.info(
+                "thinking_steps",
+                bridge_id=bridge.osm_id,
+                bridge_name=bridge.name,
+                step_count=len(steps),
+            )
             for i, step in enumerate(steps, 1):
-                print(f"  [{i}] {step}")
+                log.info(
+                    "thinking_step",
+                    bridge_id=bridge.osm_id,
+                    bridge_name=bridge.name,
+                    step_index=i,
+                    step=step,
+                )
             if progress_callback:
                 for step in steps:
                     await progress_callback({
@@ -49,7 +63,7 @@ async def get_bridge_context(bridge: BridgeTarget, progress_callback=None) -> Br
             ctx.age_years = CURRENT_YEAR - year
         return ctx
     except Exception as e:
-        print(f"[ContextAgent] Error for bridge {bridge.osm_id}: {e}")
+        log.error("context_error", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
         # Minimal fallback using OSM data
         return BridgeContext(
             construction_year=bridge.construction_year,

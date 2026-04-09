@@ -7,6 +7,11 @@ based on waterway type, width, and proximity.
 import asyncio
 import httpx
 
+from services.logging_service import get_logger
+from services.resilience import overpass_breaker, CircuitBreakerOpen
+
+log = get_logger(__name__)
+
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
@@ -67,42 +72,53 @@ async def check_waterway_proximity(
     """
     query = _waterway_query(lat, lon, radius_m)
 
-    async with httpx.AsyncClient(headers=REQUEST_HEADERS) as client:
-        for url in OVERPASS_ENDPOINTS:
-            try:
-                resp = await client.post(url, data={"data": query}, timeout=20.0)
-                resp.raise_for_status()
-                elements = resp.json().get("elements", [])
-                results = []
-                for el in elements:
-                    tags = el.get("tags", {})
-                    wtype = tags.get("waterway")
-                    name  = tags.get("name") or tags.get("name:en")
-                    # OSM width tag is a string like "12" or "12 m"
-                    raw_width = tags.get("width") or tags.get("est_width")
-                    width_m: float | None = None
-                    if raw_width:
-                        try:
-                            width_m = float(str(raw_width).split()[0])
-                        except (ValueError, IndexError):
-                            pass
-                    results.append({
-                        "osm_id":        str(el["id"]),
-                        "waterway_type": wtype,
-                        "name":          name,
-                        "width_m":       width_m,
-                        "distance_m":    None,  # Overpass around: gives proximity but not exact distance
-                    })
-                return results
-            except Exception as e:
-                short = str(e).split("\n")[0][:80]
-                print(f"[FloodService] Overpass {url.split('/')[2]}: {short}")
-                await asyncio.sleep(0.5)
+    async def _try_all_mirrors() -> list[dict]:
+        """Try each Overpass mirror in sequence; raise on total failure."""
+        async with httpx.AsyncClient(headers=REQUEST_HEADERS) as client:
+            for url in OVERPASS_ENDPOINTS:
+                try:
+                    resp = await client.post(url, data={"data": query}, timeout=20.0)
+                    resp.raise_for_status()
+                    elements = resp.json().get("elements", [])
+                    results = []
+                    for el in elements:
+                        tags = el.get("tags", {})
+                        wtype = tags.get("waterway")
+                        name  = tags.get("name") or tags.get("name:en")
+                        raw_width = tags.get("width") or tags.get("est_width")
+                        width_m: float | None = None
+                        if raw_width:
+                            try:
+                                width_m = float(str(raw_width).split()[0])
+                            except (ValueError, IndexError):
+                                pass
+                        results.append({
+                            "osm_id":        str(el["id"]),
+                            "waterway_type": wtype,
+                            "name":          name,
+                            "width_m":       width_m,
+                            "distance_m":    None,
+                        })
+                    return results
+                except Exception as e:
+                    short = str(e).split("\n")[0][:80]
+                    log.warning(
+                        "overpass_mirror_failed",
+                        mirror=url.split("/")[2],
+                        lat=lat, lon=lon, radius_m=radius_m,
+                        error=short,
+                    )
+                    await asyncio.sleep(0.5)
+        raise ConnectionError("All Overpass mirrors failed")
 
-    # All mirrors failed — return empty list rather than raising, so the
-    # HydrologicalAgent can degrade gracefully.
-    print("[FloodService] All Overpass mirrors failed for waterway query.")
-    return []
+    try:
+        return await overpass_breaker.call(_try_all_mirrors)
+    except CircuitBreakerOpen:
+        log.warning("overpass_circuit_breaker_open", lat=lat, lon=lon)
+        return []
+    except ConnectionError:
+        log.error("all_overpass_mirrors_failed", lat=lat, lon=lon, radius_m=radius_m)
+        return []
 
 
 def classify_flood_risk(

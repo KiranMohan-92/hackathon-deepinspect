@@ -11,6 +11,10 @@ import asyncio
 import math
 import httpx
 
+from services.logging_service import get_logger
+
+log = get_logger(__name__)
+
 PLACES_NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 # Places API enforces a maximum radius of 50 km
 MAX_RADIUS_M = 50_000
@@ -61,7 +65,7 @@ async def find_bridges_google(
     Fetches up to 3 pages (60 results).
     """
     async def emit(status: str, message: str):
-        print(f"[GooglePlaces] {message}")
+        log.info("google_places", status=status, message=message)
         if on_progress:
             await on_progress({"step": "google", "status": status, "message": message})
 
@@ -84,7 +88,7 @@ async def find_bridges_google(
 
             status = data.get("status")
             if status not in ("OK", "ZERO_RESULTS"):
-                print(f"[GooglePlaces] Unexpected status: {status}")
+                log.warning("google_places_unexpected_status", status=status)
                 break
 
             for place in data.get("results", []):

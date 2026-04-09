@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_UPLOAD: int = 5
     RATE_LIMIT_DEFAULT: int = 60
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "console"  # "json" for production
+
+    # Resilience
+    AGENT_TIMEOUT_SECONDS: int = 120
+    GEMINI_CIRCUIT_BREAKER_THRESHOLD: int = 5
+
     # Environment
     ENVIRONMENT: str = "development"
 

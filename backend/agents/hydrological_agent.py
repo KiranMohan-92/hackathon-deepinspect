@@ -13,11 +13,14 @@ import json
 from pathlib import Path
 
 from services.gemini_service import vision_model, text_model, json_config
+from services.logging_service import get_logger
 from services.streetview_service import fetch_bridge_images
 from services.flood_service import check_waterway_proximity, classify_flood_risk
 from models.bridge import BridgeTarget
 from models.scour import ScourAssessment
 from config import settings
+
+log = get_logger(__name__)
 
 SCOUR_VISION_PROMPT = Path("prompts/scour_vision_prompt.txt").read_text()
 
@@ -40,7 +43,7 @@ async def assess_scour(
     """
 
     async def emit(step: str):
-        print(f"[HydrologicalAgent] {step}")
+        log.info("scour_step", bridge_id=bridge.osm_id, step=step)
         if progress_callback:
             await progress_callback({
                 "type": "thinking_step",
@@ -125,9 +128,20 @@ async def assess_scour(
                     # Emit thinking steps
                     steps = data.get("thinking_steps", [])
                     if steps:
-                        print(f"\n[HydrologicalAgent] Thinking — heading {heading} for {bridge.osm_id}:")
+                        log.info(
+                            "thinking_steps",
+                            bridge_id=bridge.osm_id,
+                            heading=str(heading),
+                            step_count=len(steps),
+                        )
                         for i, step in enumerate(steps, 1):
-                            print(f"  [{i}] {step}")
+                            log.info(
+                                "thinking_step",
+                                bridge_id=bridge.osm_id,
+                                heading=str(heading),
+                                step_index=i,
+                                step=step,
+                            )
                         if progress_callback:
                             for step in steps:
                                 await progress_callback({

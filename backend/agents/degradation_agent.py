@@ -3,10 +3,13 @@ import math
 from pathlib import Path
 from datetime import datetime
 from services.gemini_service import text_model, json_config
+from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.context import BridgeContext
 from models.vision import VisualAssessment
 from models.degradation import DegradationAssessment
+
+log = get_logger(__name__)
 
 DEGRADATION_PROMPT_TEMPLATE = Path("prompts/degradation_prompt.txt").read_text()
 CURRENT_YEAR = datetime.now().year
@@ -321,9 +324,20 @@ async def assess_degradation(
 
         steps = data.get("thinking_steps", [])
         if steps:
-            print(f"\n[DegradationAgent] Thinking — {bridge.name or bridge.osm_id}:")
+            log.info(
+                "thinking_steps",
+                bridge_id=bridge.osm_id,
+                bridge_name=bridge.name,
+                step_count=len(steps),
+            )
             for i, step in enumerate(steps, 1):
-                print(f"  [{i}] {step}")
+                log.info(
+                    "thinking_step",
+                    bridge_id=bridge.osm_id,
+                    bridge_name=bridge.name,
+                    step_index=i,
+                    step=step,
+                )
             if progress_callback:
                 for step in steps:
                     await progress_callback({
@@ -349,7 +363,7 @@ async def assess_degradation(
             remaining_life = int(data["estimated_remaining_service_life_years"])
 
     except Exception as e:
-        print(f"[DegradationAgent] Gemini error for bridge {bridge.osm_id}: {e}")
+        log.error("gemini_error", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
         # Fall back to physics-only result
         active_mechanisms = _infer_mechanisms_from_physics(
             material, environment_class, de_icing, ft_damage, section_loss_pct, chloride_depth

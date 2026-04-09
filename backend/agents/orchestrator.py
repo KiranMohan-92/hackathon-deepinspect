@@ -7,8 +7,12 @@ from agents.risk_agent import generate_report
 from agents.hydrological_agent import assess_scour
 from agents.structural_type_agent import assess_structural_type
 from agents.degradation_agent import assess_degradation
+from services.logging_service import get_logger
+from services.resilience import resilient_call, gemini_breaker
 from services.streetview_service import fetch_bridge_images
 from config import settings
+
+log = get_logger(__name__)
 
 
 async def run_single_analysis(summary: BridgeSummary, progress_callback=None) -> BridgeRiskReport:
@@ -23,7 +27,7 @@ async def run_single_analysis(summary: BridgeSummary, progress_callback=None) ->
       Step 4 (sequential): RiskAgent (needs all sub-assessments)
     """
     bridge = summary_to_target(summary)
-    print(f"[Orchestrator] Analysing bridge {bridge.osm_id} ({bridge.name or 'unnamed'})")
+    log.info("analysing_bridge", bridge_id=bridge.osm_id, name=bridge.name)
 
     # Pre-fetch Street View images once — shared by Vision, Hydrological, and StructuralType agents
     images_by_heading: dict = {}
@@ -33,7 +37,7 @@ async def run_single_analysis(summary: BridgeSummary, progress_callback=None) ->
                 bridge.lat, bridge.lon, settings.GOOGLE_MAPS_API_KEY, bridge.osm_id
             )
         except Exception as e:
-            print(f"[Orchestrator] Street View pre-fetch failed for {bridge.osm_id}: {e}")
+            log.warning("streetview_prefetch_failed", bridge_id=bridge.osm_id, error=str(e))
 
     # Step 1: Vision + Context + Hydrological in parallel (all share pre-fetched images)
     (visual, per_heading), ctx, scour = await asyncio.gather(
@@ -56,40 +60,53 @@ async def run_single_analysis(summary: BridgeSummary, progress_callback=None) ->
         degradation=degradation,
         progress_callback=progress_callback,
     )
-    print(f"[Orchestrator] Analysis complete: {bridge.osm_id} → {report.risk_tier} ({report.risk_score})")
+    log.info("analysis_complete", bridge_id=bridge.osm_id, tier=report.risk_tier, score=report.risk_score)
     return report
 
 
 async def _safe_assess_scour(bridge, progress_callback, prefetched_images: dict | None = None):
-    """Run HydrologicalAgent; return None on failure to keep pipeline running."""
+    """Run HydrologicalAgent with resilience; return None on failure."""
     try:
-        return await assess_scour(bridge, progress_callback=progress_callback, prefetched_images=prefetched_images)
+        return await resilient_call(
+            lambda: assess_scour(bridge, progress_callback=progress_callback, prefetched_images=prefetched_images),
+            timeout_seconds=settings.AGENT_TIMEOUT_SECONDS,
+            max_retries=2,
+            circuit_breaker=gemini_breaker,
+        )
     except Exception as e:
-        print(f"[Orchestrator] HydrologicalAgent failed for {bridge.osm_id}: {e}")
+        log.error("agent_failed", agent="hydrological", bridge_id=bridge.osm_id, error=str(e))
         return None
 
 
 async def _safe_assess_structural_type(bridge, visual, context, progress_callback, prefetched_images: dict | None = None):
-    """Run StructuralTypeAgent; return None on failure to keep pipeline running."""
+    """Run StructuralTypeAgent with resilience; return None on failure."""
     try:
-        return await assess_structural_type(
-            bridge, visual, context, progress_callback=progress_callback, prefetched_images=prefetched_images
+        return await resilient_call(
+            lambda: assess_structural_type(
+                bridge, visual, context, progress_callback=progress_callback, prefetched_images=prefetched_images
+            ),
+            timeout_seconds=settings.AGENT_TIMEOUT_SECONDS,
+            max_retries=2,
+            circuit_breaker=gemini_breaker,
         )
     except Exception as e:
-        print(f"[Orchestrator] StructuralTypeAgent failed for {bridge.osm_id}: {e}")
+        log.error("agent_failed", agent="structural_type", bridge_id=bridge.osm_id, error=str(e))
         return None
 
 
 async def _safe_assess_degradation(bridge, context, visual, progress_callback):
-    """Run DegradationAgent; return None on failure to keep pipeline running."""
+    """Run DegradationAgent with resilience; return None on failure."""
     try:
         from models.context import BridgeContext
         ctx = context or BridgeContext()
-        return await assess_degradation(
-            bridge, ctx, visual, progress_callback=progress_callback
+        return await resilient_call(
+            lambda: assess_degradation(bridge, ctx, visual, progress_callback=progress_callback),
+            timeout_seconds=settings.AGENT_TIMEOUT_SECONDS,
+            max_retries=2,
+            circuit_breaker=gemini_breaker,
         )
     except Exception as e:
-        print(f"[Orchestrator] DegradationAgent failed for {bridge.osm_id}: {e}")
+        log.error("agent_failed", agent="degradation", bridge_id=bridge.osm_id, error=str(e))
         return None
 
 
@@ -104,13 +121,13 @@ async def run_pipeline(request: ScanRequest) -> list[BridgeRiskReport]:
       6. Degradation — sequential per-bridge degradation assessment
       7. Risk       — fuse scores, generate narrative reports
     """
-    print(f"[Orchestrator] Starting scan: query={request.query!r}, type={request.query_type}")
+    log.info("pipeline_start", query=request.query, query_type=request.query_type)
 
     # Stage 1: Discover bridges (returns BridgeSummary, convert to BridgeTarget)
     summaries = await run_discovery(request.query, request.query_type, request.bbox)
     summaries = summaries[:request.max_bridges]
     bridges = [summary_to_target(s) for s in summaries]
-    print(f"[Orchestrator] Discovered {len(bridges)} bridges")
+    log.info("bridges_discovered", count=len(bridges))
 
     if not bridges:
         return []
@@ -143,7 +160,7 @@ async def run_pipeline(request: ScanRequest) -> list[BridgeRiskReport]:
     scour_results = dict(scour_pairs)
 
     covered = sum(1 for v, _ in vision_results.values() if v is not None)
-    print(f"[Orchestrator] Vision done. Street View coverage: {covered}/{len(bridges)} bridges")
+    log.info("vision_complete", covered=covered, total=len(bridges))
 
     # Stage 5: Structural type (sequential per bridge, needs vision + context)
     structural_sem = asyncio.Semaphore(3)
@@ -188,9 +205,9 @@ async def run_pipeline(request: ScanRequest) -> list[BridgeRiskReport]:
     reports = [r for r in raw_results if isinstance(r, BridgeRiskReport)]
     failed = len(raw_results) - len(reports)
     if failed:
-        print(f"[Orchestrator] {failed} report(s) failed and were skipped.")
+        log.warning("reports_skipped", failed=failed)
 
     # Sort by risk score descending (most critical first)
     reports.sort(key=lambda r: r.risk_score, reverse=True)
-    print(f"[Orchestrator] Pipeline complete. {len(reports)} reports generated.")
+    log.info("pipeline_complete", reports_generated=len(reports))
     return reports

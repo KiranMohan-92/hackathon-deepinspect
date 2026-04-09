@@ -4,12 +4,15 @@ from datetime import datetime
 from pathlib import Path
 
 from services.gemini_service import vision_model, text_model, json_config
+from services.logging_service import get_logger
 from services.streetview_service import fetch_bridge_images
 from models.bridge import BridgeTarget
 from models.vision import VisualAssessment
 from models.context import BridgeContext
 from models.structural_type import StructuralTypeAssessment
 from config import settings
+
+log = get_logger(__name__)
 
 STRUCTURAL_TYPE_PROMPT = Path("prompts/structural_type_prompt.txt").read_text()
 CURRENT_YEAR = datetime.now().year
@@ -229,14 +232,23 @@ async def assess_structural_type(
 
                 steps = vision_data.get("thinking_steps", [])
                 if steps:
-                    print(f"\n[StructuralTypeAgent] Thinking — {bridge.osm_id}:")
+                    log.info(
+                        "thinking_steps",
+                        bridge_id=bridge.osm_id,
+                        step_count=len(steps),
+                    )
                     for i, step in enumerate(steps, 1):
-                        print(f"  [{i}] {step}")
+                        log.info(
+                            "thinking_step",
+                            bridge_id=bridge.osm_id,
+                            step_index=i,
+                            step=step,
+                        )
                     for step in steps:
                         await _emit(step)
                 vision_data.pop("thinking_steps", None)
             except Exception as exc:
-                print(f"[StructuralTypeAgent] Vision error for {bridge.osm_id}: {exc}")
+                log.error("vision_error", bridge_id=bridge.osm_id, error=str(exc), exc_info=True)
 
     # -----------------------------------------------------------------------
     # 2. OSM metadata as secondary evidence

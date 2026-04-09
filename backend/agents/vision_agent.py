@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 from services.streetview_service import fetch_bridge_images, HEADINGS
 from services.gemini_service import vision_model, json_config
+from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.vision import VisualAssessment
 from config import settings
+
+log = get_logger(__name__)
 
 VISION_PROMPT = Path("prompts/vision_prompt.txt").read_text()
 
@@ -55,12 +58,23 @@ async def analyze_bridge(
             data = json.loads(response.text)
             data["images_analyzed"] = 1
             data["street_view_coverage"] = "partial"
-            # Print thinking steps to terminal and emit via callback
+            # Log thinking steps and emit via callback
             steps = data.get("thinking_steps", [])
             if steps:
-                print(f"\n[VisionAgent] 🧠 Thinking — heading {heading} for {bridge.osm_id}:")
+                log.info(
+                    "thinking_steps",
+                    bridge_id=bridge.osm_id,
+                    heading=str(heading),
+                    step_count=len(steps),
+                )
                 for i, step in enumerate(steps, 1):
-                    print(f"  [{i}] {step}")
+                    log.info(
+                        "thinking_step",
+                        bridge_id=bridge.osm_id,
+                        heading=str(heading),
+                        step_index=i,
+                        step=step,
+                    )
                 if progress_callback:
                     for step in steps:
                         await progress_callback({
@@ -72,7 +86,13 @@ async def analyze_bridge(
             data.pop("thinking_steps", None)  # strip before Pydantic model
             per_heading[str(heading)] = VisualAssessment(**data)
         except Exception as e:
-            print(f"[VisionAgent] Error analysing heading {heading} for {bridge.osm_id}: {e}")
+            log.error(
+                "vision_analysis_error",
+                bridge_id=bridge.osm_id,
+                heading=str(heading),
+                error=str(e),
+                exc_info=True,
+            )
 
     if not per_heading:
         return None, {}

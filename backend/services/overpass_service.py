@@ -2,6 +2,9 @@ import asyncio
 import httpx
 from config import settings
 from services.google_places_service import find_bridges_google
+from services.logging_service import get_logger
+
+log = get_logger(__name__)
 
 # Public Overpass API mirrors — tried in order until one succeeds.
 # openstreetmap.fr and maps.mail.ru require a proper User-Agent (return 403 otherwise).
@@ -70,7 +73,7 @@ async def get_bridges_in_bbox(
     on_progress=None,
 ) -> list[dict]:
     async def emit(status: str, message: str):
-        print(f"[Overpass] {message}")
+        log.info("overpass_discovery", status=status, message=message)
         if on_progress:
             await on_progress({"step": "overpass", "status": status, "message": message})
 

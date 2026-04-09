@@ -3,6 +3,9 @@ Optional Redis cache with in-memory fallback.
 If Redis is unavailable or not configured, all caching falls back to a
 process-level dict (no persistence, but zero-crash behaviour).
 """
+from services.logging_service import get_logger
+
+log = get_logger(__name__)
 import json
 from typing import Any, Optional
 
@@ -22,9 +25,9 @@ async def _get_redis():
         client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         await client.ping()
         _redis_client = client
-        print("Redis cache: connected")
+        log.info("redis_connected")
     except Exception as e:
-        print(f"Redis cache: unavailable ({e}), using in-memory fallback")
+        log.warning("redis_unavailable", error=str(e))
         _redis_client = None
     return _redis_client
 
