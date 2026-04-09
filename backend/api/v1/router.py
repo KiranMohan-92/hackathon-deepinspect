@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, Request
+from fastapi import APIRouter, Depends, UploadFile, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import base64
 import json
@@ -8,6 +9,8 @@ import json
 from agents.orchestrator import run_single_analysis
 from agents.discovery_agent import run_discovery
 from config import settings
+from db.base import get_session
+from db import repository as repo
 from models.bridge import BridgeRiskReport, BridgeSummary, ScanRequest
 from utils.errors import APIError, ErrorCode, error_response
 from utils.security import validate_file_upload
@@ -255,3 +258,71 @@ async def list_bridge_images(osm_id: str):
             {"heading": h, "url": f"/api/v1/images/{osm_id}/{h}"} for h in available
         ],
     }
+
+
+# ── Persistence endpoints (Phase 1) ─────────────────────────────────────────
+
+
+@router.get("/bridges/{osm_id}/history")
+async def get_bridge_history(osm_id: str, limit: int = 50,
+                              session: AsyncSession = Depends(get_session)):
+    """Get assessment history for a bridge, newest first."""
+    records = await repo.get_bridge_history(session, osm_id, limit=limit)
+    return [
+        {
+            "id": r.id,
+            "risk_score": r.risk_score,
+            "risk_tier": r.risk_tier,
+            "confidence": r.confidence,
+            "model_version": r.model_version,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in records
+    ]
+
+
+@router.get("/bridges/{osm_id}/trend")
+async def get_bridge_trend(osm_id: str,
+                            session: AsyncSession = Depends(get_session)):
+    """Get the latest trend record for a bridge."""
+    trend = await repo.detect_trend(session, osm_id)
+    if not trend:
+        return {"osm_id": osm_id, "trend": None}
+    return {
+        "osm_id": osm_id,
+        "trend": {
+            "direction": trend.direction,
+            "delta": trend.delta,
+            "previous_tier": trend.previous_tier,
+            "current_tier": trend.current_tier,
+            "previous_score": trend.previous_score,
+            "current_score": trend.current_score,
+            "assessed_at": trend.assessed_at.isoformat() if trend.assessed_at else None,
+        },
+    }
+
+
+@router.get("/escalations")
+async def get_escalations(limit: int = 20,
+                           session: AsyncSession = Depends(get_session)):
+    """Get bridges with escalating risk trends."""
+    trends = await repo.get_escalations(session, limit=limit)
+    return [
+        {
+            "bridge_id": t.bridge_id,
+            "direction": t.direction,
+            "delta": t.delta,
+            "current_tier": t.current_tier,
+            "previous_tier": t.previous_tier,
+            "assessed_at": t.assessed_at.isoformat() if t.assessed_at else None,
+        }
+        for t in trends
+    ]
+
+
+@router.get("/bridges/{osm_id}/evidence")
+async def get_bridge_evidence(osm_id: str,
+                               session: AsyncSession = Depends(get_session)):
+    """Get evidence records linked to the latest assessment for a bridge."""
+    evidence = await repo.get_bridge_evidence(session, osm_id)
+    return {"osm_id": osm_id, "evidence": evidence}

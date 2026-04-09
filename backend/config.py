@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SECONDS: int = 120
     GEMINI_CIRCUIT_BREAKER_THRESHOLD: int = 5
 
+    # Database
+    DATABASE_URL: str = "sqlite+aiosqlite:///./deepinspect.db"
+    DATABASE_AUTO_INIT: bool = True  # create_all on startup (dev/demo)
+
     # Environment
     ENVIRONMENT: str = "development"
 

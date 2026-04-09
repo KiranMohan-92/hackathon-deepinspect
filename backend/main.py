@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -39,10 +40,22 @@ missing_keys = settings.validate_required_keys()
 if missing_keys:
     log.warning("missing_required_keys", keys=missing_keys)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: initialize database on startup."""
+    if settings.DATABASE_AUTO_INIT:
+        from db.base import init_db
+        await init_db()
+        log.info("database_initialized", url=settings.DATABASE_URL.split("///")[0] + "///...")
+    yield
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="Production-grade bridge inspection API",
+    lifespan=lifespan,
 )
 
 try:
