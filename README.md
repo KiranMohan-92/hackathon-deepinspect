@@ -59,7 +59,7 @@ You need two API keys.
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Enable these two APIs:
    - **Street View Static API** — bridge imagery
-   - **Geocoding API** — city name to coordinates (fallback; primary geocoding uses free OSM Nominatim)
+   - **Geocoding API** — city name to coordinates (primary; free OSM Nominatim is used as fallback)
 3. Go to **Credentials** > **Create API Key**
 4. Copy the key
 
@@ -225,7 +225,7 @@ The final output is a `PhysicsHealthCertificate` containing:
 
 ## 7. Agent Architecture
 
-DeepInspect uses a hierarchical agentic swarm — 7 specialized agents orchestrated in a parallel/sequential execution graph:
+DeepInspect uses a hierarchical agentic swarm — 8 agent modules (7 specialized + 1 orchestrator) in a parallel/sequential execution graph:
 
 ```
 DiscoveryAgent --> bridge found
@@ -259,7 +259,7 @@ DiscoveryAgent --> bridge found
 | Agent | Criteria | Data sources | Output |
 |-------|----------|-------------|--------|
 | **DiscoveryAgent** | — | OSM Overpass (6 mirrors), Google Places (fallback), Nominatim geocoding | `list[BridgeSummary]` with priority scores |
-| **HydrologicalAgent** | #1 Scour | OSM waterway tags within 500m, flood risk classification, Gemini Vision (exposed foundations, erosion, debris) | `ScourAssessment` |
+| **HydrologicalAgent** | #1 Scour | OSM waterway tags within 100m, flood risk classification, Gemini Vision (exposed foundations, erosion, debris) | `ScourAssessment` |
 | **VisionAgent** | #4,5,8,9,11 | Street View at 6 headings (0/60/120/180/240/300 degrees), Gemini Vision with 14 defect categories | `VisualAssessment` |
 | **ContextAgent** | — | Gemini text model, Polish infrastructure knowledge (Soviet-era WPS/WPT panels, GDDKiA records) | `BridgeContext` (era, material, incidents, traffic, significance) |
 | **StructuralTypeAgent** | #2,3,6 | Gemini Vision (structure type classification), OSM tags, redundancy lookup table (beam/truss/arch/cable/suspension) | `StructuralTypeAssessment` |
@@ -299,7 +299,7 @@ All SSE (Server-Sent Events) endpoints stream `data: {...}\n\n` lines with event
 GET /health
 ```
 
-Returns: `{"status": "ok", "model": "gemini-3.1-flash"}`
+Returns: `{"status": "ok", "version": "1.0.0", "model": "gemini-3.1-flash"}`
 
 ### Bridge Discovery (SSE stream)
 
@@ -370,7 +370,14 @@ Headings: `0` (N), `60` (NE), `120` (SE), `180` (S), `240` (SW), `300` (NW).
 GET /api/bridges/{osm_id}/images
 ```
 
-Returns list of cached heading values for a bridge.
+Returns cached image metadata for a bridge:
+```json
+{"osm_id": "12345", "images": [{"heading": 0, "url": "/api/images/12345/0"}, ...]}
+```
+
+### Versioned API (v1)
+
+All endpoints above are also available under the `/api/v1/` prefix (e.g., `POST /api/v1/scan`). The v1 router includes additional security middleware (API key auth, rate limiting, request audit logging).
 
 ---
 
@@ -447,10 +454,14 @@ Safety-critical target: **false-negative rate < 10%** (how often DeepInspect mis
 ```
 deepinspect/
 +-- backend/
-|   +-- main.py                           # FastAPI app + 8 endpoints
+|   +-- main.py                           # FastAPI app + 8 endpoints (+ v1 router mount)
 |   +-- config.py                         # Pydantic settings from .env
 |   +-- .env.example                      # Full environment template
 |   +-- requirements.txt                  # Python dependencies
+|   +-- Dockerfile                        # Backend container image
+|   +-- api/
+|   |   +-- v1/
+|   |       +-- router.py                # Versioned API with security middleware
 |   +-- agents/
 |   |   +-- orchestrator.py               # 7-agent parallel/sequential execution graph
 |   |   +-- discovery_agent.py            # OSM Overpass -> priority-scored bridges
@@ -526,10 +537,15 @@ deepinspect/
 |   |       +-- riskColors.ts             # Risk tier + defect colour palettes
 |   |       +-- motionVariants.ts         # Framer Motion animation presets
 |   +-- index.html
+|   +-- .env.example                      # Frontend env template
 |   +-- tailwind.config.js                # Custom dark glassmorphism theme
+|   +-- postcss.config.js                 # PostCSS config for Tailwind
 |   +-- vite.config.ts                    # Vite bundler config
 |   +-- tsconfig.json                     # TypeScript strict mode config
 |   +-- package.json
+|   +-- Dockerfile                        # Frontend container image
++-- backend/tests/                        # pytest unit + API tests
++-- tests-e2e/                            # Playwright E2E tests
 +-- reference/                            # European inspection reference library
 |   +-- standards/                        # EU frameworks (COST TU1406, BRIME, FHWA, Italian 2020)
 |   +-- country-systems/                  # 8 country rating systems (DE/FR/UK/NL/IT/PL/NO/SE)
@@ -556,7 +572,11 @@ deepinspect/
 +-- scripts/
 |   +-- precompute_demo.py                # Generate demo cache data
 |   +-- stitch-generate.mjs              # Google Stitch SDK UI generation
++-- docker-compose.yml                    # Container orchestration
++-- docker-compose.override.yml           # Development overrides
++-- docker-compose.prod.yml               # Production config
 +-- DESIGN.md                            # Orbital Command Center design system
++-- WORKFLOW.md                          # n8n workflow documentation
 +-- README.md
 ```
 
@@ -602,6 +622,6 @@ The PDF generator fetches Roboto Unicode fonts from jsDelivr CDN on first export
 | Frontend | React 18, TypeScript, Zustand, Recharts, Framer Motion, Leaflet |
 | Styling | Tailwind CSS 3.4 (dark glassmorphism theme) |
 | PDF | jsPDF with Roboto Unicode font embedding |
-| Map | OpenStreetMap tiles via react-leaflet (no API key) |
+| Map | CARTO dark basemap tiles (OpenStreetMap data) via react-leaflet (no API key) |
 | Data | OSM Overpass API (6 mirrors), Google Street View, Google Places (fallback) |
 | Cache | Redis (optional, with in-memory fallback) |
