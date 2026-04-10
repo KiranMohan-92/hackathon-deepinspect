@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.css";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.Default.css";
 import L from "leaflet";
 import { Crosshair, AlertTriangle } from "lucide-react";
 import useAppStore from "../store/useAppStore";
@@ -95,7 +98,12 @@ interface BridgeMarkersProps {
 function BridgeMarkers({ bridges, analyzedBridges, checkedBridgeIds, selectedBridgeId, onHover, onHoverClear, onSelect }: BridgeMarkersProps) {
   const map = useMap();
   return (
-    <>
+    <MarkerClusterGroup
+      chunkedLoading
+      maxClusterRadius={60}
+      spiderfyOnMaxZoom
+      showCoverageOnHover={false}
+    >
       {bridges.map((bridge) => {
         const report = analyzedBridges[bridge.osm_id];
         const tier = report?.risk_tier || null;
@@ -117,7 +125,7 @@ function BridgeMarkers({ bridges, analyzedBridges, checkedBridgeIds, selectedBri
           />
         );
       })}
-    </>
+    </MarkerClusterGroup>
   );
 }
 
