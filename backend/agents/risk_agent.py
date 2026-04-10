@@ -11,6 +11,9 @@ from models.degradation import DegradationAssessment
 from services.gemini_service import text_model, narrative_config
 from services.logging_service import get_logger
 from utils.scoring import compute_base_risk_score, score_to_tier, compute_criterion_scores, compute_weighted_risk_score
+from utils.rating_conversion import convert_all
+from utils.cost_estimation import estimate_repair_cost
+from services.decision_service import compute_decision
 
 log = get_logger(__name__)
 
@@ -74,6 +77,25 @@ async def generate_report(
             data_sources_summary=all_sources,
             assessment_limitations=limitations,
             generated_at=datetime.utcnow(),
+        )
+
+        # Phase 3: EU ratings, cost estimation, decision policy
+        max_criterion_score = max((c.score for c in criteria), default=overall_score)
+        has_safety_finding = any(
+            c.score >= 4.0 and c.criterion_rank >= 10
+            for c in criteria
+        )
+        cert.european_ratings = convert_all(
+            overall_score, max_criterion_score, has_safety_finding
+        )
+        cert.estimated_repair_cost = estimate_repair_cost(
+            authoritative_tier,
+            primary_defects=[c.criterion_name for c in criteria if c.score >= 3.5],
+        )
+        cert.decision = compute_decision(
+            risk_tier=authoritative_tier,
+            confidence=overall_conf,
+            criteria_results=[c.model_dump() for c in criteria],
         )
     except Exception as e:
         log.error("certificate_build_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)

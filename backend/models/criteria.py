@@ -56,6 +56,12 @@ class PhysicsHealthCertificate(BaseModel):
     model_version: str = "3.0.0"
     thinking_steps: list[str] = []
 
+    # European rating equivalents (Phase 3)
+    european_ratings: dict = {}
+    estimated_repair_cost: Optional[dict] = None
+    decision: Optional[dict] = None
+    consistency_statement: str = "This assessment is deterministic: identical inputs produce identical scores. Methodology: FHWA-RD-01-020 adapted for remote sensing."
+
     # Legacy compatibility — overall condition narrative
     condition_summary: str = ""
     key_risk_factors: list[str] = []
