@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Any, Optional
@@ -34,10 +36,12 @@ def error_response(
     message: str,
     details: Optional[list] = None,
 ) -> JSONResponse:
+    error_id = uuid.uuid4().hex[:12]
     return JSONResponse(
         status_code=status_code,
         content={
             "error": {
+                "error_id": error_id,
                 "code": code,
                 "message": message,
                 "details": details or [],

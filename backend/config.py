@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "deepinspect"
 
+    # Authentication (optional — disabled by default for development)
+    AUTH_ENABLED: bool = False
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_EXPIRY_MINUTES: int = 60
+    JWT_ISSUER: str = "deepinspect"
+    JWT_AUDIENCE: str = "deepinspect-api"
+
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+
     # Environment
     ENVIRONMENT: str = "development"
 
@@ -77,6 +87,20 @@ class Settings(BaseSettings):
         if not self.GOOGLE_MAPS_API_KEY:
             missing.append("GOOGLE_MAPS_API_KEY")
         return missing
+
+    def validate_production_config(self) -> list[str]:
+        """Enforce safety in staging/production."""
+        errors = []
+        if self.ENVIRONMENT in ("staging", "production"):
+            if not self.AUTH_ENABLED:
+                errors.append("AUTH_ENABLED must be true in production")
+            if self.DEMO_MODE:
+                errors.append("DEMO_MODE must be false in production")
+            if self.JWT_SECRET == "change-me-in-production":
+                errors.append("JWT_SECRET must be changed in production")
+            if "sqlite" in self.DATABASE_URL:
+                errors.append("Use PostgreSQL in production")
+        return errors
 
     class Config:
         env_file = ".env"

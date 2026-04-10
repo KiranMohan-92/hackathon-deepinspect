@@ -40,6 +40,10 @@ missing_keys = settings.validate_required_keys()
 if missing_keys:
     log.warning("missing_required_keys", keys=missing_keys)
 
+prod_errors = settings.validate_production_config()
+if prod_errors:
+    log.error("production_config_invalid", errors=prod_errors)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,11 +79,7 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:3000",
-    ],
+    allow_origins=settings.CORS_ORIGINS.split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
