@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./deepinspect.db"
     DATABASE_AUTO_INIT: bool = True  # create_all on startup (dev/demo)
 
+    # Observability
+    METRICS_ENABLED: bool = True
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "deepinspect"
+
     # Environment
     ENVIRONMENT: str = "development"
 

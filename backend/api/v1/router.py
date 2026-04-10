@@ -55,6 +55,21 @@ async def get_metrics():
     }
 
 
+@router.get("/metrics/prometheus")
+async def prometheus_metrics():
+    from services.metrics_service import prometheus_text
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(prometheus_text(), media_type="text/plain; version=0.0.4")
+
+
+@router.get("/ready")
+async def readiness():
+    from services.readiness_service import readiness_snapshot
+    result = await readiness_snapshot()
+    status_code = 200 if result["ready"] else 503
+    return JSONResponse(content=result, status_code=status_code)
+
+
 @router.post("/scan")
 async def scan_bridges(request: ScanRequest, req: Request):
     metrics["scan_requests"] += 1
