@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { BridgeListPage } from './pages/BridgeListPage';
 import { BridgeDetailPage } from './pages/BridgeDetailPage';
+import { API_ROUTES, fulfillApiRoute, mockHealthAPI } from './support/apiMocks';
 
 const mockBridges = [
   {
@@ -45,18 +46,13 @@ const mockAnalysisReport = {
   generated_at: new Date().toISOString(),
 };
 
-async function mockDemoAPI(page: Page, bridges = mockBridges) {
-  await page.route('**/api/v1/demo', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bridges),
-    });
-  });
+function formatSSE(events: unknown[]): string {
+  return `${events.map((event) => `data: ${JSON.stringify(event)}`).join('\n\n')}\n\n`;
+}
 
-  await page.route('**/api/demo', async (route) => {
-    await route.fulfill({
-      status: 200,
+async function mockDemoAPI(page: Page, bridges = mockBridges) {
+  await page.route(API_ROUTES.demo, async (route) => {
+    await fulfillApiRoute(route, {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bridges),
     });
@@ -64,44 +60,28 @@ async function mockDemoAPI(page: Page, bridges = mockBridges) {
 }
 
 async function mockAnalyzeAPI(page: Page, report = mockAnalysisReport) {
-  await page.route('**/api/v1/bridges/*/analyze', async (route) => {
-    const body = `data: ${JSON.stringify({ type: 'complete', report })}`;
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-      body,
-    });
-  });
-
-  await page.route('**/api/bridges/*/analyze', async (route) => {
-    const body = `data: ${JSON.stringify({ type: 'complete', report })}`;
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
+  await page.route(API_ROUTES.analyze, async (route) => {
+    const body = formatSSE([{ type: 'complete', report }]);
+    await fulfillApiRoute(route, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Content-Type': 'text/event-stream',
+      },
       body,
     });
   });
 }
 
 async function mockStreetViewImages(page: Page) {
-  const fakeJpeg = Buffer.from([
-    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-    0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9,
-  ]);
+  const image = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64',
+  );
   
-  await page.route('**/api/v1/images/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'image/jpeg' },
-      body: fakeJpeg,
-    });
-  });
-
-  await page.route('**/api/images/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'image/jpeg' },
-      body: fakeJpeg,
+  await page.route(API_ROUTES.images, async (route) => {
+    await fulfillApiRoute(route, {
+      headers: { 'Content-Type': 'image/png' },
+      body: image,
     });
   });
 }
@@ -113,6 +93,8 @@ test.describe('Export Flow', () => {
   test.beforeEach(async ({ page }) => {
     bridgeListPage = new BridgeListPage(page);
     bridgeDetailPage = new BridgeDetailPage(page);
+
+    await mockHealthAPI(page);
     await mockDemoAPI(page);
     await mockAnalyzeAPI(page);
     await mockStreetViewImages(page);
@@ -127,13 +109,14 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const pdfButton = page.getByRole('button', { name: /pdf|download.*report|mission briefing/i });
     const isVisible = await pdfButton.isVisible().catch(() => false);
     
     if (isVisible) {
-      await expect(pdfButton).toBeVisible();
+      await expect(pdfButton).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -145,13 +128,14 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const csvButton = page.getByRole('button', { name: /csv/i });
     const isVisible = await csvButton.isVisible().catch(() => false);
     
     if (isVisible) {
-      await expect(csvButton).toBeVisible();
+      await expect(csvButton).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -163,13 +147,14 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const jsonButton = page.getByRole('button', { name: /json/i });
     const isVisible = await jsonButton.isVisible().catch(() => false);
     
     if (isVisible) {
-      await expect(jsonButton).toBeVisible();
+      await expect(jsonButton).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -181,21 +166,19 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
-    const pdfButton = page.getByRole('button', { name: /pdf|download.*report/i });
-    
-    if (await pdfButton.isVisible()) {
-      await pdfButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const toast = page.locator('[class*="toast"], [role="status"]');
-      const hasToast = await toast.count() > 0;
-      
-      const buttonText = await pdfButton.textContent();
-      expect(hasToast || buttonText?.includes('Downloaded')).toBeTruthy();
-    }
+    const pdfButton = page.getByRole('button', { name: /pdf|download.*report|mission briefing/i });
+
+    await expect(pdfButton).toBeVisible({ timeout: 10000 });
+    await pdfButton.click();
+
+    // After click, button text changes to "DOWNLOADED" or a toast appears
+    const successIndicator = page.getByText(/downloaded/i).or(
+      page.locator('[class*="toast"], [role="status"]')
+    );
+    await expect(successIndicator.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should trigger CSV export and download file', async ({ page }) => {
@@ -206,7 +189,8 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const csvButton = page.getByRole('button', { name: /csv/i });
     
@@ -230,7 +214,8 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const jsonButton = page.getByRole('button', { name: /json/i });
     
@@ -254,7 +239,8 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const pdfButton = page.getByRole('button', { name: /pdf|download.*report/i });
     
@@ -276,7 +262,8 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const exportButton = page.getByRole('button', { name: /csv|json/i }).first();
     
@@ -300,7 +287,8 @@ test.describe('Export Flow', () => {
     await bridgeDetailPage.waitForPanelOpen();
     
     await bridgeDetailPage.runDeepAnalysis();
-    await page.waitForTimeout(2000);
+    await bridgeDetailPage.waitForAnalysisComplete();
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
     
     const exportButtons = page.getByRole('button', { name: /export|pdf|csv|json|download/i });
     const count = await exportButtons.count();

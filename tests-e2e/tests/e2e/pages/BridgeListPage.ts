@@ -19,20 +19,20 @@ export class BridgeListPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.searchInput = page.getByPlaceholder(/enter city|search|lat.*lon/i);
-    this.scanButton = page.getByRole('button', { name: /^scan$/i });
-    this.demoButton = page.getByRole('button', { name: /demo/i });
+    this.searchInput = page.getByLabel(/search query/i);
+    this.scanButton = page.getByRole('button', { name: /start scan/i });
+    this.demoButton = page.getByRole('button', { name: /load demo data/i });
     this.cityModeButton = page.getByRole('button', { name: /^city$/i });
     this.bridgeModeButton = page.getByRole('button', { name: /^bridge$/i });
     this.coordsModeButton = page.getByRole('button', { name: /^coords$/i });
-    this.filterButtons = page.getByRole('button', { name: /^all$|^critical$|^high$|^medium$|^low$/i });
-    this.bridgeList = page.locator('[role="list"], [class*="list"]');
-    this.loadingIndicator = page.locator('[role="progressbar"], [class*="loading"], [class*="spinner"]');
+    this.filterButtons = page.getByRole('button', { name: /^(all|critical|high|medium|ok)(?:\s*\(\d+\))?$/i });
+    this.bridgeList = page.locator('[role="list"]').first();
+    this.loadingIndicator = page.locator('[role="progressbar"]');
     this.errorAlert = page.locator('[role="alert"], [class*="error"]');
-    this.bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]');
+    this.bridgeItems = page.locator('[role="listitem"]');
     this.selectAllCheckbox = page.locator('input[type="checkbox"]').first();
     this.analyzeSelectedButton = page.getByRole('button', { name: /analyze.*\d+|analyze/i });
-    this.roadClassTabs = page.locator('[role="tablist"] button, [class*="tab"]');
+    this.roadClassTabs = page.locator('[role="tablist"] button');
   }
 
   async goto(): Promise<void> {
@@ -68,20 +68,21 @@ export class BridgeListPage {
   }
 
   async waitForLoadingComplete(timeout = 30000): Promise<void> {
-    await this.loadingIndicator.waitFor({ state: 'hidden', timeout }).catch(() => {});
-    await this.page.waitForTimeout(500);
+    await expect(this.loadingIndicator).toBeHidden({ timeout });
+    await this.page.getByText('DISCOVERING').waitFor({ state: 'hidden', timeout }).catch(() => {});
+    await this.page.waitForTimeout(250);
   }
 
   async waitForBridgesToLoad(timeout = 10000): Promise<void> {
-    await this.bridgeItems.first().waitFor({ state: 'visible', timeout }).catch(() => {});
+    await expect(this.bridgeItems.first()).toBeVisible({ timeout });
   }
 
   async getBridgeCount(): Promise<number> {
     return this.bridgeItems.count();
   }
 
-  async filterByRiskTier(tier: 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'): Promise<void> {
-    const button = this.filterButtons.getByText(tier, { exact: true });
+  async filterByRiskTier(tier: 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'OK'): Promise<void> {
+    const button = this.page.getByRole('button', { name: new RegExp(`^${tier}(?:\\s*\\(\\d+\\))?$`, 'i') });
     if (await button.isVisible()) {
       await button.click();
     }
@@ -91,12 +92,12 @@ export class BridgeListPage {
     const items = this.bridgeItems;
     const count = await items.count();
     if (index < count) {
-      await items.nth(index).click();
+      await items.nth(index).getByRole('button', { name: /view details for bridge/i }).click();
     }
   }
 
   async selectBridgeByName(name: string): Promise<void> {
-    const item = this.bridgeItems.getByText(name, { exact: false }).first();
+    const item = this.page.getByRole('button', { name: new RegExp(`view details for bridge.*${name}`, 'i') }).first();
     if (await item.isVisible()) {
       await item.click();
     }

@@ -13,19 +13,19 @@ export class MapPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.mapContainer = page.locator('[class*="leaflet"], [class*="map-container"]');
+    this.mapContainer = page.locator('.leaflet-container').first();
     this.zoomInButton = page.locator('.leaflet-control-zoom-in, [class*="zoom-in"]');
     this.zoomOutButton = page.locator('.leaflet-control-zoom-out, [class*="zoom-out"]');
     this.bridgeMarkers = page.locator('[class*="leaflet-marker"], [class*="marker-icon"], [class*="bridge-marker"]');
-    this.viewportScanButton = page.getByRole('button', { name: /scan area|scan viewport/i });
-    this.filterBar = page.locator('[class*="filter"], [role="group"][aria-label*="filter"]');
+    this.viewportScanButton = page.getByRole('button', { name: /scan current map area/i });
+    this.filterBar = page.getByRole('group', { name: /filter bridges by risk/i });
     this.viewportSummary = page.locator('[class*="summary"], [aria-live="polite"]');
     this.hoverCard = page.locator('[role="tooltip"], [class*="tooltip"], [class*="hover-card"]');
   }
 
   async waitForMapLoad(timeout = 10000): Promise<void> {
-    await this.mapContainer.waitFor({ state: 'visible', timeout });
-    await this.page.waitForTimeout(1000);
+    await expect(this.mapContainer).toBeVisible({ timeout });
+    await this.page.waitForTimeout(500);
   }
 
   async getMarkerCount(): Promise<number> {
@@ -97,7 +97,7 @@ export class MapPage {
   }
 
   async clickFilterButton(tier: string): Promise<void> {
-    const button = this.page.getByRole('button', { name: new RegExp(`^${tier}$`, 'i') });
+    const button = this.page.getByRole('button', { name: new RegExp(`^${tier}(?:\\s*\\(\\d+\\))?$`, 'i') });
     if (await button.isVisible()) {
       await button.click();
     }

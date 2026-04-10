@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { API_ROUTES, fulfillApiRoute, mockHealthAPI } from './support/apiMocks';
 
 const mockImageAnalysisResult = {
   defects: [
@@ -29,17 +30,8 @@ const mockImageAnalysisResult = {
 };
 
 async function mockImageAnalysisAPI(page: Page, result = mockImageAnalysisResult) {
-  await page.route('**/api/v1/analyze-image', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(result),
-    });
-  });
-
-  await page.route('**/api/analyze-image', async (route) => {
-    await route.fulfill({
-      status: 200,
+  await page.route(API_ROUTES.analyzeImage, async (route) => {
+    await fulfillApiRoute(route, {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(result),
     });
@@ -47,16 +39,8 @@ async function mockImageAnalysisAPI(page: Page, result = mockImageAnalysisResult
 }
 
 async function mockImageAnalysisError(page: Page, errorMessage: string) {
-  await page.route('**/api/v1/analyze-image', async (route) => {
-    await route.fulfill({
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ detail: errorMessage }),
-    });
-  });
-
-  await page.route('**/api/analyze-image', async (route) => {
-    await route.fulfill({
+  await page.route(API_ROUTES.analyzeImage, async (route) => {
+    await fulfillApiRoute(route, {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ detail: errorMessage }),
@@ -66,14 +50,16 @@ async function mockImageAnalysisError(page: Page, errorMessage: string) {
 
 test.describe('Image Upload Flow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockHealthAPI(page);
     await mockImageAnalysisAPI(page);
     await page.goto('/');
   });
 
   test('should display upload button in header', async ({ page }) => {
-    const uploadButton = page.getByRole('button', { name: /upload/i });
-    const count = await uploadButton.count();
-    expect(count).toBeGreaterThan(0);
+    const uploadControl = page.locator('label').filter({
+      has: page.locator('input[type="file"][aria-label="Upload bridge photo"]'),
+    });
+    await expect(uploadControl).toBeVisible();
   });
 
   test('should have file input for image upload', async ({ page }) => {
@@ -162,29 +148,25 @@ test.describe('Image Upload Flow', () => {
   });
 
   test('should show error for invalid file type', async ({ page }) => {
+    await page.unroute(API_ROUTES.analyzeImage);
     await mockImageAnalysisError(page, 'Invalid file type. Only images are allowed.');
 
     const fileInput = page.locator('input[type="file"]').first();
 
     await fileInput.setInputFiles({
-      name: 'test.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('not an image'),
-    }).catch(() => {});
+      name: 'test.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from('not a valid image'),
+    });
 
-    await page.waitForTimeout(2000);
-
-    const errorElement = page.locator('[role="alert"], text=/error|invalid/i');
-    const hasError = await errorElement.count() > 0;
-
-    expect(hasError).toBeTruthy();
+    await expect(page.getByRole('alert')).toContainText(/invalid file type/i, { timeout: 5000 });
   });
 
   test('should show loading state during analysis', async ({ page }) => {
-    await page.route('**/api/v1/analyze-image', async (route) => {
+    await page.unroute(API_ROUTES.analyzeImage);
+    await page.route(API_ROUTES.analyzeImage, async (route) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
-      await route.fulfill({
-        status: 200,
+      await fulfillApiRoute(route, {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mockImageAnalysisResult),
       });
@@ -234,6 +216,7 @@ test.describe('Image Upload Flow', () => {
   });
 
   test('should show immediate attention badge for critical defects', async ({ page }) => {
+    await page.unroute(API_ROUTES.analyzeImage);
     await mockImageAnalysisAPI(page, {
       ...mockImageAnalysisResult,
       requires_immediate_attention: true,
@@ -255,6 +238,7 @@ test.describe('Image Upload Flow', () => {
   });
 
   test('should show no defects message when image is clean', async ({ page }) => {
+    await page.unroute(API_ROUTES.analyzeImage);
     await mockImageAnalysisAPI(page, {
       ...mockImageAnalysisResult,
       defects: [],

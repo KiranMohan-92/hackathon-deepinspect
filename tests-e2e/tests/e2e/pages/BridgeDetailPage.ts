@@ -21,22 +21,22 @@ export class BridgeDetailPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.panel = page.locator('[class*="panel"]').last();
-    this.bridgeName = page.locator('[class*="panel"] [class*="title"], [class*="panel"] h2, [class*="panel"] h3').first();
-    this.bridgeCoordinates = page.locator('[class*="panel"] [class*="coordinates"], [class*="panel"] [class*="mono"]').first();
-    this.analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-    this.riskScore = page.locator('[class*="score"], [data-testid="risk-score"]');
-    this.riskTier = page.locator('[class*="tier"], [data-testid="risk-tier"]');
-    this.riskBadge = page.locator('[class*="badge"], [class*="risk-badge"]');
-    this.streetViewImages = page.locator('[class*="panel"] img, [class*="image-viewer"] img');
-    this.thinkingSteps = page.locator('[class*="thinking"], [class*="reasoning"], [class*="steps"]');
-    this.closeButton = page.getByRole('button', { name: /close|back/i }).first();
-    this.conditionSummary = page.locator('text=/condition summary|condition/i');
-    this.keyRiskFactors = page.locator('text=/key risk factor|risk factor/i');
-    this.recommendedAction = page.locator('text=/recommended action|action/i');
-    this.maintenanceNotes = page.locator('text=/maintenance|task/i');
-    this.bridgeContext = page.locator('text=/built|material|era|age/i');
-    this.exportSection = page.locator('[class*="export"], [class*="download"]');
+    this.panel = page.locator('main > div').last();
+    this.bridgeName = this.panel.locator('p.font-medium').first();
+    this.bridgeCoordinates = this.panel.locator('.font-mono').filter({ hasText: /^-?\d+\.\d+,\s*-?\d+\.\d+$/ }).first();
+    this.analyzeButton = page.getByRole('button', { name: /^run deep analysis$/i });
+    this.riskScore = this.panel.getByText(/^[0-5]\.\d$/).first();
+    this.riskTier = this.panel.getByText(/^(CRITICAL|HIGH|MEDIUM|OK)$/).first();
+    this.riskBadge = this.riskTier;
+    this.streetViewImages = this.panel.locator('img[alt^="Street view"]');
+    this.thinkingSteps = this.panel.getByText(/AI REASONING|VISION|CONTEXT|RISK/i);
+    this.closeButton = this.panel.locator('button[title="Back to list"], button').first();
+    this.conditionSummary = this.panel.getByText(/^CONDITION SUMMARY$/i);
+    this.keyRiskFactors = this.panel.getByText(/^KEY RISK FACTORS$/i);
+    this.recommendedAction = this.panel.getByText(/^RECOMMENDED ACTION$/i);
+    this.maintenanceNotes = this.panel.getByText(/^MAINTENANCE TASKS$/i);
+    this.bridgeContext = this.panel.getByText(/^(BUILT|MATERIAL|ERA|AGE)$/i);
+    this.exportSection = this.panel.getByRole('button', { name: /download pdf report|generating pdf|downloaded/i });
   }
 
   async openBridgeByOsmId(osmId: string): Promise<void> {
@@ -46,26 +46,26 @@ export class BridgeDetailPage {
   }
 
   async openBridgeByIndex(index: number): Promise<void> {
-    const items = this.page.locator('[role="listitem"], [class*="bridge-item"]');
+    const items = this.page.locator('[role="listitem"]');
     const count = await items.count();
     if (index < count) {
-      await items.nth(index).click();
+      await items.nth(index).getByRole('button', { name: /view details for bridge/i }).click();
       await this.waitForPanelOpen();
     }
   }
 
   async waitForPanelOpen(timeout = 5000): Promise<void> {
-    await this.panel.waitFor({ state: 'visible', timeout });
+    await expect(this.panel).toBeVisible({ timeout });
   }
 
   async waitForAnalysisStart(timeout = 5000): Promise<void> {
-    await this.analyzeButton.waitFor({ state: 'hidden', timeout }).catch(() => {});
+    await this.page.getByRole('button', { name: /analyzing/i }).waitFor({ state: 'visible', timeout }).catch(() => {});
   }
 
-  async waitForAnalysisComplete(timeout = 60000): Promise<void> {
-    await this.thinkingSteps.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-    await this.analyzeButton.waitFor({ state: 'hidden', timeout }).catch(() => {});
-    await this.riskBadge.first().waitFor({ state: 'visible', timeout }).catch(() => {});
+  async waitForAnalysisComplete(timeout = 15000): Promise<void> {
+    await expect(this.analyzeButton).toBeHidden({ timeout });
+    await expect(this.riskBadge).toBeVisible({ timeout });
+    await this.page.waitForTimeout(250);
   }
 
   async runDeepAnalysis(): Promise<void> {
@@ -128,7 +128,6 @@ export class BridgeDetailPage {
   }
 
   async isAnalyzing(): Promise<boolean> {
-    const buttonText = await this.analyzeButton.textContent();
-    return buttonText?.toLowerCase().includes('analyzing') ?? false;
+    return (await this.page.getByRole('button', { name: /analyzing/i }).count()) > 0;
   }
 }

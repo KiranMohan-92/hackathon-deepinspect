@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { BridgeListPage } from './pages/BridgeListPage';
 import { BridgeDetailPage } from './pages/BridgeDetailPage';
+import { API_ROUTES, fulfillApiRoute, mockHealthAPI } from './support/apiMocks';
 
 const mockBridges = [
   {
@@ -50,78 +51,61 @@ const mockAnalysisReport = {
   generated_at: new Date().toISOString(),
 };
 
-async function mockDemoAPI(page: Page, bridges = mockBridges) {
-  await page.route('**/api/v1/demo', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bridges),
-    });
-  });
+function formatSSE(events: unknown[]): string {
+  return `${events.map((event) => `data: ${JSON.stringify(event)}`).join('\n\n')}\n\n`;
+}
 
-  await page.route('**/api/demo', async (route) => {
-    await route.fulfill({
-      status: 200,
+async function mockDemoAPI(page: Page, bridges = mockBridges) {
+  await page.route(API_ROUTES.demo, async (route) => {
+    await fulfillApiRoute(route, {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bridges),
     });
   });
 }
 
-async function mockAnalyzeAPI(page: Page, report = mockAnalysisReport) {
-  await page.route('**/api/v1/bridges/*/analyze', async (route) => {
-    const thinkingSteps = [
-      { type: 'thinking_step', stage: 'vision', heading: '0', step: 'Analyzing Street View imagery...' },
-      { type: 'thinking_step', stage: 'context', heading: null, step: 'Evaluating historical construction data...' },
-      { type: 'thinking_step', stage: 'risk', heading: null, step: 'Calculating composite risk score...' },
-      { type: 'complete', report },
-    ];
-    
-    const body = thinkingSteps.map(e => `data: ${JSON.stringify(e)}`).join('\n\n');
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-      body,
-    });
-  });
+async function mockAnalyzeAPI(
+  page: Page,
+  report = mockAnalysisReport,
+  { includeComplete = true }: { includeComplete?: boolean } = {},
+) {
+  const events: unknown[] = [
+    { type: 'thinking_step', stage: 'vision', heading: '0', step: 'Analyzing Street View imagery...' },
+    { type: 'thinking_step', stage: 'context', heading: null, step: 'Evaluating historical construction data...' },
+    { type: 'thinking_step', stage: 'risk', heading: null, step: 'Calculating composite risk score...' },
+  ];
+  if (includeComplete) {
+    events.push({ type: 'complete', report });
+  }
+  const body = formatSSE(events);
 
-  await page.route('**/api/bridges/*/analyze', async (route) => {
-    const thinkingSteps = [
-      { type: 'thinking_step', stage: 'vision', heading: '0', step: 'Analyzing Street View imagery...' },
-      { type: 'thinking_step', stage: 'context', heading: null, step: 'Evaluating historical construction data...' },
-      { type: 'thinking_step', stage: 'risk', heading: null, step: 'Calculating composite risk score...' },
-      { type: 'complete', report },
-    ];
-    
-    const body = thinkingSteps.map(e => `data: ${JSON.stringify(e)}`).join('\n\n');
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
+  await page.route(API_ROUTES.analyze, async (route) => {
+    await fulfillApiRoute(route, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Content-Type': 'text/event-stream',
+      },
       body,
     });
   });
+}
+
+async function openFirstBridge(page: Page) {
+  const bridgeButton = page.getByRole('button', { name: /view details for bridge/i }).first();
+  await expect(bridgeButton).toBeVisible({ timeout: 5000 });
+  await bridgeButton.click();
 }
 
 async function mockStreetViewImages(page: Page) {
-  await page.route('**/api/v1/images/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'image/jpeg' },
-      body: Buffer.from([
-        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-        0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9,
-      ]),
-    });
-  });
+  const image = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64',
+  );
 
-  await page.route('**/api/images/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'image/jpeg' },
-      body: Buffer.from([
-        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-        0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9,
-      ]),
+  await page.route(API_ROUTES.images, async (route) => {
+    await fulfillApiRoute(route, {
+      headers: { 'Content-Type': 'image/png' },
+      body: image,
     });
   });
 }
@@ -133,6 +117,8 @@ test.describe('Bridge Analysis Flow', () => {
   test.beforeEach(async ({ page }) => {
     bridgeListPage = new BridgeListPage(page);
     bridgeDetailPage = new BridgeDetailPage(page);
+
+    await mockHealthAPI(page);
     await mockDemoAPI(page);
     await mockAnalyzeAPI(page);
     await mockStreetViewImages(page);
@@ -143,177 +129,117 @@ test.describe('Bridge Analysis Flow', () => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      await expect(bridgeDetailPage.panel).toBeVisible({ timeout: 5000 });
-    }
+    await openFirstBridge(page);
+    await expect(bridgeDetailPage.panel).toBeVisible({ timeout: 5000 });
   });
 
   test('should show Run Deep Analysis button in bridge detail panel', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await expect(analyzeButton).toBeVisible({ timeout: 5000 });
-    }
+    await openFirstBridge(page);
+    
+    await expect(bridgeDetailPage.analyzeButton).toBeVisible({ timeout: 5000 });
   });
 
   test('should trigger deep analysis when Run Deep Analysis button is clicked', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await expect(analyzeButton).toBeDisabled();
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    
+    await expect(bridgeDetailPage.analyzeButton).toBeHidden({ timeout: 10000 });
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
   });
 
   test('should display SSE progress updates (thinking steps) during analysis', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      const thinkingSection = page.locator('[class*="thinking"], [class*="reasoning"], [aria-live="polite"]');
-      await page.waitForTimeout(2000);
-      
-      const hasThinkingSteps = await thinkingSection.count() > 0;
-      expect(hasThinkingSteps).toBeTruthy();
-    }
+    await openFirstBridge(page);
+    await page.unroute(API_ROUTES.analyze);
+    await mockAnalyzeAPI(page, mockAnalysisReport, { includeComplete: false });
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    
+    await expect(page.getByText(/AI REASONING|VISION|CONTEXT|RISK/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should render final report with risk score and tier after analysis', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const riskTierElement = page.locator('[class*="risk-tier"], [class*="tier"]').first();
-      const riskScoreElement = page.locator('[class*="risk-score"], [class*="score"]').first();
-      
-      const hasRiskTier = await riskTierElement.count() > 0;
-      const hasRiskScore = await riskScoreElement.count() > 0;
-      
-      expect(hasRiskTier || hasRiskScore).toBeTruthy();
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    await bridgeDetailPage.waitForAnalysisComplete();
+    
+    await expect(bridgeDetailPage.riskTier).toBeVisible({ timeout: 10000 });
+    await expect(bridgeDetailPage.riskScore).toBeVisible({ timeout: 10000 });
   });
 
   test('should display Street View images in report', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const images = page.locator('img[src*="images"], img[src*="street"]');
-      const imageCount = await images.count();
-      
-      expect(imageCount).toBeGreaterThanOrEqual(0);
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    await bridgeDetailPage.waitForAnalysisComplete();
+    
+    await expect(bridgeDetailPage.streetViewImages.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show condition summary in report', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const summarySection = page.locator('text=/condition|summary/i');
-      const hasSummary = await summarySection.count() > 0;
-      
-      expect(hasSummary).toBeTruthy();
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    await bridgeDetailPage.waitForAnalysisComplete();
+    
+    await bridgeDetailPage.conditionSummary.scrollIntoViewIfNeeded().catch(() => {});
+    await expect(bridgeDetailPage.conditionSummary).toBeVisible({ timeout: 10000 });
   });
 
   test('should display key risk factors in report', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const riskFactorsSection = page.locator('text=/risk factor|key risk/i');
-      const hasRiskFactors = await riskFactorsSection.count() > 0;
-      
-      expect(hasRiskFactors).toBeTruthy();
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    await bridgeDetailPage.waitForAnalysisComplete();
+    
+    await bridgeDetailPage.keyRiskFactors.scrollIntoViewIfNeeded().catch(() => {});
+    await expect(bridgeDetailPage.keyRiskFactors).toBeVisible({ timeout: 10000 });
   });
 
   test('should show recommended action in report', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      const analyzeButton = page.getByRole('button', { name: /run deep analysis|analyze/i });
-      await analyzeButton.click();
-      
-      await page.waitForTimeout(3000);
-      
-      const actionSection = page.locator('text=/recommended action|action/i');
-      const hasAction = await actionSection.count() > 0;
-      
-      expect(hasAction).toBeTruthy();
-    }
+    await openFirstBridge(page);
+    
+    await bridgeDetailPage.runDeepAnalysis();
+    await bridgeDetailPage.waitForAnalysisComplete();
+    
+    await bridgeDetailPage.recommendedAction.scrollIntoViewIfNeeded().catch(() => {});
+    await expect(bridgeDetailPage.recommendedAction).toBeVisible({ timeout: 10000 });
   });
 
   test('should close bridge detail panel when close button is clicked', async ({ page }) => {
     await bridgeListPage.loadDemo();
     await bridgeListPage.waitForLoadingComplete();
     
-    const bridgeItems = page.locator('[role="listitem"], [class*="bridge-item"]').first();
-    if (await bridgeItems.isVisible()) {
-      await bridgeItems.click();
-      
-      await expect(bridgeDetailPage.panel).toBeVisible({ timeout: 5000 });
-      
-      const closeButton = page.getByRole('button', { name: /close|back/i }).first();
-      if (await closeButton.isVisible()) {
-        await closeButton.click();
-      }
-    }
+    await openFirstBridge(page);
+    
+    await expect(bridgeDetailPage.panel).toBeVisible({ timeout: 5000 });
+    
+    await bridgeDetailPage.close();
+    await expect(bridgeDetailPage.analyzeButton).toBeHidden({ timeout: 5000 });
   });
 });
