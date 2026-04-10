@@ -81,21 +81,37 @@ async def generate_report(
 
         # Phase 3: EU ratings, cost estimation, decision policy
         max_criterion_score = max((c.score for c in criteria), default=overall_score)
+        # IQOA S suffix: only for criterion rank 11 (railing/safety) with user-safety finding
         has_safety_finding = any(
-            c.score >= 4.0 and c.criterion_rank >= 10
+            c.score >= 4.0 and c.criterion_rank == 11
             for c in criteria
         )
         cert.european_ratings = convert_all(
             overall_score, max_criterion_score, has_safety_finding
         )
+
+        # Cost estimation: extract defect tokens from criterion names for bracket matching
+        defect_tokens = []
+        for c in criteria:
+            if c.score >= 3.5:
+                name_token = c.criterion_name.lower().replace(" ", "_").replace("/", "_")
+                defect_tokens.append(name_token)
+        span_count = structural.span_count if structural else None
         cert.estimated_repair_cost = estimate_repair_cost(
             authoritative_tier,
-            primary_defects=[c.criterion_name for c in criteria if c.score >= 3.5],
+            primary_defects=defect_tokens,
+            span_count=span_count,
         )
+
+        # Decision policy: pass structural and trend context
+        is_fracture_critical = structural.fracture_critical if structural else False
+        capacity_flag = structural.capacity_vs_demand_flag if structural else None
         cert.decision = compute_decision(
             risk_tier=authoritative_tier,
             confidence=overall_conf,
             criteria_results=[c.model_dump() for c in criteria],
+            fracture_critical=is_fracture_critical,
+            capacity_vs_demand=capacity_flag,
         )
     except Exception as e:
         log.error("certificate_build_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
