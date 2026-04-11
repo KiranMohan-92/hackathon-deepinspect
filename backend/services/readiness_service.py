@@ -1,5 +1,6 @@
 """Readiness and health check service."""
 import asyncio
+from config import settings
 from services.logging_service import get_logger
 
 log = get_logger(__name__)
@@ -18,10 +19,10 @@ async def check_database_health() -> dict:
 
 async def check_gemini_health() -> dict:
     try:
-        from services.gemini_service import text_model
-        # Just check the model object exists (don't make API call)
-        if text_model:
-            return {"status": "ok", "model": str(text_model.model_name)}
+        from services.gemini_service import client
+        # Just check the client object exists (don't make API call)
+        if client:
+            return {"status": "ok", "model": settings.GEMINI_MODEL}
         return {"status": "unknown"}
     except Exception as e:
         return {"status": "error", "error": str(e)[:100]}

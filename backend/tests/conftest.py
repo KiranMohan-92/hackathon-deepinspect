@@ -16,10 +16,10 @@ os.environ.setdefault("ENVIRONMENT", "test")
 
 @pytest.fixture
 def mock_gemini():
-    with patch("services.gemini_service.vision_model") as mock:
+    with patch("services.gemini_service.client") as mock:
         mock_response = MagicMock()
         mock_response.text = '{"cracking": {"score": 2, "confidence": "medium", "key_observations": "none", "regions": [], "potential_cause": ""}, "spalling": {"score": 1, "confidence": "high", "key_observations": "none", "regions": [], "potential_cause": ""}, "corrosion": {"score": 1, "confidence": "high", "key_observations": "none", "regions": [], "potential_cause": ""}, "surface_degradation": {"score": 1, "confidence": "high", "key_observations": "none", "regions": [], "potential_cause": ""}, "drainage": {"score": 2, "confidence": "medium", "key_observations": "none", "regions": [], "potential_cause": ""}, "structural_deformation": {"score": 1, "confidence": "high", "key_observations": "none", "regions": [], "potential_cause": ""}, "overall_visual_score": 1.5, "requires_immediate_attention": false, "visible_defects_summary": "Minor issues", "images_analyzed": 1, "street_view_coverage": "full"}'
-        mock.generate_content.return_value = mock_response
+        mock.models.generate_content.return_value = mock_response
         yield mock
 
 

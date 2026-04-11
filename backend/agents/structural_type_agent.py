@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from services.gemini_service import vision_model, text_model, json_config
+from services.gemini_service import client, json_config
 from services.logging_service import get_logger
 from services.streetview_service import fetch_bridge_images
 from models.bridge import BridgeTarget
@@ -226,7 +226,11 @@ async def assess_structural_type(
                 },
             ]
             try:
-                response = vision_model.generate_content(parts, generation_config=json_config)
+                response = client.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=parts,
+                    config=json_config,
+                )
                 vision_data = json.loads(response.text)
                 data_sources.append("street_view_vision")
 

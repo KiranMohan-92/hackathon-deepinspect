@@ -147,7 +147,8 @@ class TrendRecord(Base):
 
     __tablename__ = "trends"
     __table_args__ = (
-        Index("ix_trends_bridge", "bridge_id"),
+        Index("ix_trends_bridge_assessed", "bridge_id", "assessed_at"),
+        Index("ix_trends_direction_assessed", "direction", "assessed_at"),
     )
 
     id = Column(String(32), primary_key=True, default=_uuid)

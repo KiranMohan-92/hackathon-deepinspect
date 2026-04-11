@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from services.gemini_service import text_model, json_config
+from config import settings
+from services.gemini_service import client, json_config
 from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.context import BridgeContext
@@ -29,7 +30,11 @@ async def get_bridge_context(bridge: BridgeTarget, progress_callback=None) -> Br
     )
 
     try:
-        response = text_model.generate_content(prompt, generation_config=json_config)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=json_config,
+        )
         data = json.loads(response.text)
         # Log thinking steps and emit via callback
         steps = data.get("thinking_steps", [])

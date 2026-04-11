@@ -42,7 +42,10 @@ if missing_keys:
 
 prod_errors = settings.validate_production_config()
 if prod_errors:
-    log.error("production_config_invalid", errors=prod_errors)
+    for err in prod_errors:
+        log.error("production_config_error", error=err)
+    if settings.ENVIRONMENT in ("staging", "production"):
+        raise RuntimeError(f"Production config invalid: {'; '.join(prod_errors)}")
 
 
 @asynccontextmanager
@@ -235,7 +238,7 @@ async def analyze_uploaded_image_legacy(file: UploadFile):
     image_bytes = await file.read()
     validate_file_upload(file.content_type, len(image_bytes))
 
-    from services.gemini_service import json_config, vision_model
+    from services.gemini_service import client, json_config
 
     prompt_text = Path("prompts/vision_prompt.txt").read_text()
     parts = [
@@ -248,7 +251,11 @@ async def analyze_uploaded_image_legacy(file: UploadFile):
         },
     ]
     try:
-        response = vision_model.generate_content(parts, generation_config=json_config)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=parts,
+            config=json_config,
+        )
         return json.loads(response.text)
     except Exception:
         raise APIError(

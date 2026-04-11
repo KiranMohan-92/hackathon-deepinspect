@@ -2,7 +2,8 @@ import json
 import math
 from pathlib import Path
 from datetime import datetime
-from services.gemini_service import text_model, json_config
+from config import settings
+from services.gemini_service import client, json_config
 from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.context import BridgeContext
@@ -319,7 +320,11 @@ async def assess_degradation(
     data_sources: list[str] = ["ISO 9223/9224 corrosion categories", "Fick's 2nd Law (chloride ingress)", "Polish regional climate data"]
 
     try:
-        response = text_model.generate_content(prompt, generation_config=json_config)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=json_config,
+        )
         data = json.loads(response.text)
 
         steps = data.get("thinking_steps", [])

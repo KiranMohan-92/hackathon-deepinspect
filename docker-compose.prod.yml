@@ -8,7 +8,7 @@ services:
     image: ghcr.io/${GITHUB_USER:-organization}/deepinspect-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      - APP_ENV=production
+      - ENVIRONMENT=production
       - LOG_LEVEL=WARNING
       - DEMO_MODE=false
     deploy:

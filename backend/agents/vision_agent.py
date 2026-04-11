@@ -3,7 +3,7 @@ import base64
 import json
 from pathlib import Path
 from services.streetview_service import fetch_bridge_images, HEADINGS
-from services.gemini_service import vision_model, json_config
+from services.gemini_service import client, json_config
 from services.logging_service import get_logger
 from models.bridge import BridgeTarget
 from models.vision import VisualAssessment
@@ -54,7 +54,11 @@ async def analyze_bridge(
             },
         ]
         try:
-            response = vision_model.generate_content(parts, generation_config=json_config)
+            response = client.models.generate_content(
+                model=settings.GEMINI_MODEL,
+                contents=parts,
+                config=json_config,
+            )
             data = json.loads(response.text)
             data["images_analyzed"] = 1
             data["street_view_coverage"] = "partial"

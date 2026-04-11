@@ -243,7 +243,7 @@ async def analyze_uploaded_image(file: UploadFile, req: Request):
     image_bytes = await file.read()
     validate_file_upload(file.content_type, len(image_bytes))
 
-    from services.gemini_service import json_config, vision_model
+    from services.gemini_service import client, json_config
 
     prompt_text = Path("prompts/vision_prompt.txt").read_text()
     parts = [
@@ -256,7 +256,11 @@ async def analyze_uploaded_image(file: UploadFile, req: Request):
         },
     ]
     try:
-        response = vision_model.generate_content(parts, generation_config=json_config)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=parts,
+            config=json_config,
+        )
         log_audit(
             action="analyze-image",
             user_ip=req.client.host if req.client else None,

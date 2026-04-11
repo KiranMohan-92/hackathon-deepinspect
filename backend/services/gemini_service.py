@@ -1,19 +1,15 @@
-import google.generativeai as genai
-from google.generativeai import GenerationConfig
+from google import genai
+from google.genai import types
 from config import settings
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
-
-# Single model for all tasks — plain Gemini, no search grounding
-text_model = genai.GenerativeModel(settings.GEMINI_MODEL)
-vision_model = genai.GenerativeModel(settings.GEMINI_MODEL)
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 # JSON-enforced output configs
-json_config = GenerationConfig(
+json_config = types.GenerateContentConfig(
     response_mime_type="application/json",
     temperature=0.1,
 )
-narrative_config = GenerationConfig(
+narrative_config = types.GenerateContentConfig(
     response_mime_type="application/json",
     temperature=0.4,
 )

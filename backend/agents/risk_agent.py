@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from datetime import datetime
+from config import settings
 from models.bridge import BridgeTarget, BridgeRiskReport
 from models.vision import VisualAssessment
 from models.context import BridgeContext
@@ -8,7 +9,7 @@ from models.criteria import PhysicsHealthCertificate, CriterionResult
 from models.scour import ScourAssessment
 from models.structural_type import StructuralTypeAssessment
 from models.degradation import DegradationAssessment
-from services.gemini_service import text_model, narrative_config
+from services.gemini_service import client, narrative_config
 from services.logging_service import get_logger
 from utils.scoring import compute_base_risk_score, score_to_tier, compute_criterion_scores, compute_weighted_risk_score
 from utils.rating_conversion import convert_all
@@ -141,7 +142,11 @@ async def generate_report(
             base_score=authoritative_score,
             tier=authoritative_tier,
         )
-        response = text_model.generate_content(prompt, generation_config=narrative_config)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=narrative_config,
+        )
         narrative = json.loads(response.text)
         steps = narrative.get("thinking_steps", [])
         if steps:

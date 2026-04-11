@@ -12,7 +12,7 @@ import base64
 import json
 from pathlib import Path
 
-from services.gemini_service import vision_model, text_model, json_config
+from services.gemini_service import client, json_config
 from services.logging_service import get_logger
 from services.streetview_service import fetch_bridge_images
 from services.flood_service import check_waterway_proximity, classify_flood_risk
@@ -122,7 +122,11 @@ async def assess_scour(
                     },
                 ]
                 try:
-                    response = vision_model.generate_content(parts, generation_config=json_config)
+                    response = client.models.generate_content(
+                        model=settings.GEMINI_MODEL,
+                        contents=parts,
+                        config=json_config,
+                    )
                     data = json.loads(response.text)
 
                     # Emit thinking steps
