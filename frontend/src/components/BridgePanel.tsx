@@ -2,15 +2,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X, Map, ChevronRight, Loader2, CheckCircle, XCircle, Circle, Brain, Eye, BookOpen, Shield } from "lucide-react";
 import useAppStore from "../store/useAppStore";
 import { useBridgeAnalyze } from "../hooks/useBridgeAnalyze";
+import { AnalysisThinkingStep, BridgeSummary } from "../types";
 import { RISK_COLORS } from "../utils/riskColors";
 import RiskBadge from "./RiskBadge";
 import ReportExport from "./ReportExport";
 import BridgeImageViewer from "./BridgeImageViewer";
 import BridgeList from "./BridgeList";
-import { BridgeDetailSkeleton } from "./SkeletonLoader";
 import PhysicsCertificateView from "./PhysicsCertificateView";
 
-const ROAD_LABELS = {
+const ROAD_LABELS: Record<string, string> = {
   motorway: "Motorway", motorway_link: "Motorway Link",
   trunk: "Trunk Road", trunk_link: "Trunk Link",
   primary: "Primary Road", primary_link: "Primary Link",
@@ -18,14 +18,21 @@ const ROAD_LABELS = {
   unclassified: "Local Road", residential: "Residential",
 };
 
+const slideEase: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+
 const slidePanel = {
   initial: { opacity: 0, x: 20 },
-  animate: { opacity: 1, x: 0, transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] } },
+  animate: { opacity: 1, x: 0, transition: { duration: 0.3, ease: slideEase } },
   exit: { opacity: 0, x: 20, transition: { duration: 0.2 } },
 };
 
 // ─── Metadata item ───────────────────────────────────────────────────────────
-function MetaItem({ label, value }) {
+interface MetaItemProps {
+  label: string;
+  value: string | number | null | undefined;
+}
+
+function MetaItem({ label, value }: MetaItemProps) {
   if (!value) return null;
   return (
     <div>
@@ -36,7 +43,7 @@ function MetaItem({ label, value }) {
 }
 
 // ─── Thinking Feed (live AI reasoning) ──────────────────────────────────────
-const STAGE_META = {
+const STAGE_META: Record<string, { icon: typeof Eye; label: string; color: string }> = {
   vision: { icon: Eye, label: "VISION", color: "text-accent" },
   context: { icon: BookOpen, label: "CONTEXT", color: "intel-accent" },
   scour: { icon: Eye, label: "SCOUR", color: "text-severity-high" },
@@ -45,8 +52,8 @@ const STAGE_META = {
   risk: { icon: Shield, label: "RISK", color: "text-severity-critical" },
 };
 
-function ThinkingFeed({ osm_id }) {
-  const blocks = useAppStore((s) => s.analysisThinking[osm_id]) || [];
+function ThinkingFeed({ osm_id }: { osm_id: string }) {
+  const blocks: AnalysisThinkingStep[] = useAppStore((s) => s.analysisThinking[osm_id]) || [];
   if (blocks.length === 0) return null;
 
   return (
@@ -95,7 +102,7 @@ function ThinkingFeed({ osm_id }) {
 }
 
 // ─── Pre-analysis view ───────────────────────────────────────────────────────
-function BridgePreAnalysis({ bridge }) {
+function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
   const { analyzeOneBridge } = useBridgeAnalyze();
   const analyzingBridgeIds = useAppStore((s) => s.analyzingBridgeIds);
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
@@ -125,7 +132,7 @@ function BridgePreAnalysis({ bridge }) {
       {/* Metadata */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-4 border-b border-glass-border grid grid-cols-2 gap-x-6 gap-y-3">
-          <MetaItem label="ROAD CLASS" value={ROAD_LABELS[bridge.road_class] || bridge.road_class} />
+          <MetaItem label="ROAD CLASS" value={ROAD_LABELS[bridge.road_class ?? ""] || bridge.road_class} />
           <MetaItem label="PRIORITY" value={`${bridge.priority_score} / 6.5`} />
           <MetaItem label="BUILT" value={bridge.construction_year} />
           {bridge.material && bridge.material !== "unknown" && (
@@ -190,7 +197,7 @@ function BridgePreAnalysis({ bridge }) {
 }
 
 // ─── Post-analysis report ────────────────────────────────────────────────────
-function BridgeReport({ bridge, report }) {
+function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: any }) {
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
 
   const tierColor = RISK_COLORS[report.risk_tier] || RISK_COLORS.OK;
@@ -253,7 +260,7 @@ function BridgeReport({ bridge, report }) {
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-label mb-1.5">KEY RISK FACTORS</p>
             <ul className="space-y-1.5">
-              {report.key_risk_factors.map((f, i) => (
+              {report.key_risk_factors.map((f: string, i: number) => (
                 <li key={i} className="text-xs text-muted flex gap-1.5">
                   <ChevronRight className="w-3 h-3 text-severity-critical flex-shrink-0 mt-0.5" />
                   {f}
@@ -281,7 +288,7 @@ function BridgeReport({ bridge, report }) {
           <div className="px-4 py-3 border-b border-glass-border">
             <p className="text-label mb-1.5">MAINTENANCE TASKS</p>
             <ul className="space-y-1.5">
-              {report.maintenance_notes.map((n, i) => (
+              {report.maintenance_notes.map((n: string, i: number) => (
                 <li key={i} className="text-xs text-muted flex gap-1.5">
                   <span className="text-dim flex-shrink-0">-</span>
                   {n}
@@ -337,14 +344,14 @@ function EmptyState() {
 }
 
 // ─── Step icon ───────────────────────────────────────────────────────────────
-function StepIcon({ status }) {
+function StepIcon({ status }: { status: string }) {
   if (status === "ok") return <CheckCircle className="w-3.5 h-3.5 text-severity-ok flex-shrink-0" />;
   if (status === "failed") return <XCircle className="w-3.5 h-3.5 text-severity-critical flex-shrink-0" />;
   if (status === "trying") return <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0" />;
   return <Circle className="w-3 h-3 text-dim flex-shrink-0" />;
 }
 
-function messageColor(status) {
+function messageColor(status: string) {
   if (status === "ok") return "text-severity-ok";
   if (status === "failed") return "text-severity-critical";
   if (status === "trying") return "text-accent";

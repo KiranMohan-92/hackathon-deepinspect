@@ -68,6 +68,15 @@ backend/data/demo_images/
 service-account*.json
 credentials*.json
 
+# Secrets
+client_secret_*.json
+*.pem
+.env
+
 # Misc
 *.log
 .omc/
+deepinspect.db
+/*.pdf
+backend/__pycache__/
+.codex/

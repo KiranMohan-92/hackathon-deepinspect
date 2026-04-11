@@ -12,7 +12,7 @@ const LABELS = {
   structural_deformation: "Deformation",
 };
 
-function CustomTooltip({ active, payload }) {
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
   if (!active || !payload?.[0]) return null;
   const { defectKey, value } = payload[0].payload;
   return (
@@ -25,7 +25,7 @@ function CustomTooltip({ active, payload }) {
   );
 }
 
-function renderBarLabel({ x, y, width, height, value }) {
+function renderBarLabel({ x, y, width, height, value }: any) {
   if (value === 0) return null;
   return (
     <text
@@ -42,18 +42,18 @@ function renderBarLabel({ x, y, width, height, value }) {
   );
 }
 
-export default function DefectFrequencyChart({ analyzedBridges }) {
-  const reports = Object.values(analyzedBridges).filter((r) => r.visual_assessment);
+export default function DefectFrequencyChart({ analyzedBridges }: { analyzedBridges: Record<string, any> }) {
+  const reports = Object.values(analyzedBridges).filter((r: any) => r.visual_assessment);
   if (reports.length === 0) return null;
 
   const data = DEFECT_KEYS.map((key) => {
     const scores = reports
-      .map((r) => r.visual_assessment?.[key]?.score)
+      .map((r: any) => r.visual_assessment?.[key]?.score)
       .filter((s) => s != null);
     const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     return {
       defectKey: key,
-      label: LABELS[key] || key,
+      label: (LABELS as Record<string, string>)[key] || key,
       value: Math.round(avg * 10) / 10,
       color: DEFECT_COLORS[key],
     };

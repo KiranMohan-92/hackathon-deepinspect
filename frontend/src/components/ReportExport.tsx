@@ -9,9 +9,13 @@ import { jsPDF } from "jspdf";
 // We embed Roboto (full Latin Extended-A/B) fetched from jsDelivr CDN and
 // cached at module level so it is only downloaded once per browser session.
 
-let _fontCache = null; // false = fetch failed, object = loaded
+type FontCache = { normal: string; bold: string; italic: string } | false | null;
+type OverlayImage = { dataUrl: string; aspectRatio: number };
+type DefectRegion = { x1: number; y1: number; x2: number; y2: number };
 
-function bufToBase64(buf) {
+let _fontCache: FontCache = null; // false = fetch failed, object = loaded
+
+function bufToBase64(buf: ArrayBuffer) {
   const bytes = new Uint8Array(buf);
   let binary = "";
   for (let i = 0; i < bytes.length; i += 8192) {
@@ -20,7 +24,7 @@ function bufToBase64(buf) {
   return btoa(binary);
 }
 
-async function fetchFont(url) {
+async function fetchFont(url: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000); // 8 s timeout
   try {
@@ -34,7 +38,7 @@ async function fetchFont(url) {
 
 const ROBOTO = "https://cdn.jsdelivr.net/gh/google/fonts@3a87e65bdd1be6a41a4e38eb1e08cfa46a4d98e2/apache/roboto/static";
 
-async function ensureFonts(doc) {
+async function ensureFonts(doc: any) {
   // Load fonts only once per session
   if (_fontCache === null) {
     try {
@@ -48,8 +52,9 @@ async function ensureFonts(doc) {
         bold:   bufToBase64(boldBuf),
         italic: bufToBase64(italicBuf),
       };
-    } catch (e) {
-      console.warn("DeepInspect: could not load Unicode font, falling back to helvetica.", e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn("DeepInspect: could not load Unicode font, falling back to helvetica.", message);
       _fontCache = false;
     }
   }
@@ -65,8 +70,9 @@ async function ensureFonts(doc) {
     doc.addFileToVFS("Roboto-Italic.ttf", _fontCache.italic);
     doc.addFont("Roboto-Italic.ttf", "Roboto", "italic");
     return "Roboto";
-  } catch (e) {
-    console.warn("DeepInspect: font embedding failed, falling back to helvetica.", e.message);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("DeepInspect: font embedding failed, falling back to helvetica.", message);
     return "helvetica";
   }
 }
@@ -75,7 +81,7 @@ async function ensureFonts(doc) {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const DEFECT_COLORS_HEX = {
+const DEFECT_COLORS_HEX: Record<string, string> = {
   cracking:               "#EF4444",
   spalling:               "#F97316",
   corrosion:              "#92400E",
@@ -94,7 +100,7 @@ const HEADINGS = [
   { value: 300, label: "North-West" },
 ];
 
-function hexToRgb(hex) {
+function hexToRgb(hex: string) {
   return [
     parseInt(hex.slice(1, 3), 16),
     parseInt(hex.slice(3, 5), 16),
@@ -102,7 +108,7 @@ function hexToRgb(hex) {
   ];
 }
 
-function tint(hex, opacity = 0.12) {
+function tint(hex: string, opacity = 0.12) {
   const [r, g, b] = hexToRgb(hex);
   return [
     Math.round(r * opacity + 255 * (1 - opacity)),
@@ -111,8 +117,8 @@ function tint(hex, opacity = 0.12) {
   ];
 }
 
-async function fetchImageWithOverlay(url, va) {
-  return new Promise((resolve) => {
+async function fetchImageWithOverlay(url: string, va: any): Promise<OverlayImage | null> {
+  return new Promise((resolve: (value: OverlayImage | null) => void) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -122,6 +128,10 @@ async function fetchImageWithOverlay(url, va) {
       canvas.width  = w;
       canvas.height = h;
       const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
       ctx.drawImage(img, 0, 0);
 
       if (va) {
@@ -130,7 +140,7 @@ async function fetchImageWithOverlay(url, va) {
           if (!defect || defect.score < 2 || !defect.regions?.length) return;
           const [r, g, b] = hexToRgb(DEFECT_COLORS_HEX[key]);
 
-          defect.regions.forEach((region) => {
+          defect.regions.forEach((region: DefectRegion) => {
             const x  = region.x1 * w;
             const y  = region.y1 * h;
             const bw = (region.x2 - region.x1) * w;
@@ -171,22 +181,22 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 
 // ─── Score / tier helpers ─────────────────────────────────────────────────────
 
-function scoreHex(score) {
+function scoreHex(score: number) {
   if (score >= 4.0) return "#DC2626"; // CRITICAL
   if (score >= 3.0) return "#EA580C"; // HIGH
   if (score >= 2.0) return "#CA8A04"; // MEDIUM
   return "#16A34A";                   // OK
 }
 
-function tierHex(tier) {
-  return { CRITICAL: "#DC2626", HIGH: "#EA580C", MEDIUM: "#CA8A04", OK: "#16A34A" }[tier] || "#6B7280";
+function tierHex(tier: string) {
+  return ({ CRITICAL: "#DC2626", HIGH: "#EA580C", MEDIUM: "#CA8A04", OK: "#16A34A" } as Record<string, string>)[tier] || "#6B7280";
 }
 
-function confidenceHex(conf) {
-  return { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" }[conf?.toLowerCase()] || "#9CA3AF";
+function confidenceHex(conf: string | null | undefined) {
+  return ({ high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" } as Record<string, string>)[conf?.toLowerCase() || ""] || "#9CA3AF";
 }
 
-function tierLabel(score) {
+function tierLabel(score: number) {
   if (score >= 4.0) return "CRITICAL";
   if (score >= 3.0) return "HIGH";
   if (score >= 2.0) return "MEDIUM";
@@ -195,7 +205,7 @@ function tierLabel(score) {
 
 // ─── PDF layout helpers ───────────────────────────────────────────────────────
 
-function ensureSpace(doc, y, needed) {
+function ensureSpace(doc: any, y: number, needed: number) {
   if (y + needed > PAGE_H - 20) {
     doc.addPage();
     return 18;
@@ -203,14 +213,14 @@ function ensureSpace(doc, y, needed) {
   return y;
 }
 
-function hRule(doc, y) {
+function hRule(doc: any, y: number) {
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.2);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
   return y + 5;
 }
 
-function sectionTitle(doc, text, y, F) {
+function sectionTitle(doc: any, text: string, y: number, F: string) {
   y = ensureSpace(doc, y, 12);
   doc.setFillColor(243, 244, 246);
   doc.rect(MARGIN, y - 3, CONTENT_W, 8, "F");
@@ -222,7 +232,7 @@ function sectionTitle(doc, text, y, F) {
 }
 
 // Draw a horizontal score bar (score 0–5 scale)
-function drawScoreBar(doc, x, y, score, maxW) {
+function drawScoreBar(doc: any, x: number, y: number, score: number, maxW: number) {
   const barH  = 3;
   const fillW = Math.max(0, Math.min(score / 5, 1)) * maxW;
   const [r, g, b] = hexToRgb(scoreHex(score));
@@ -233,7 +243,7 @@ function drawScoreBar(doc, x, y, score, maxW) {
 }
 
 // Small inline chip (text only, coloured background)
-function drawChip(doc, text, x, y, hexColor, F) {
+function drawChip(doc: any, text: string, x: number, y: number, hexColor: string, F: string) {
   const [r, g, b] = hexToRgb(hexColor);
   doc.setFont(F, "bold");
   doc.setFontSize(10.5);
@@ -248,7 +258,7 @@ function drawChip(doc, text, x, y, hexColor, F) {
 }
 
 // Generate a short report ID from bridge_id + timestamp
-function reportId(bridge) {
+function reportId(bridge: any) {
   const ts  = bridge.generated_at ? new Date(bridge.generated_at).getTime() : Date.now();
   const hash = (ts ^ (ts >>> 16)) & 0xFFFFFF;
   const id   = (bridge.bridge_id || "").replace(/\D/g, "").slice(0, 6);
@@ -257,7 +267,7 @@ function reportId(bridge) {
 
 // ─── Page footer ──────────────────────────────────────────────────────────────
 
-function drawFooter(doc, F, pageNum, totalPages, rid) {
+function drawFooter(doc: any, F: string, pageNum: number, totalPages: number, rid: string) {
   doc.setPage(pageNum);
   doc.setFillColor(17, 24, 39);
   doc.rect(0, PAGE_H - 10, PAGE_W, 10, "F");
@@ -279,7 +289,7 @@ function drawFooter(doc, F, pageNum, totalPages, rid) {
 
 // ─── PAGE 1: Cover + Executive Summary ───────────────────────────────────────
 
-function buildCoverPage(doc, bridge, cert, F, rid) {
+function buildCoverPage(doc: any, bridge: any, cert: any, F: string, rid: string) {
   const tier      = cert?.overall_risk_tier || bridge.risk_tier || "UNKNOWN";
   const score     = cert?.overall_risk_score ?? bridge.risk_score ?? 0;
   const conf      = cert?.overall_confidence || bridge.overall_confidence || "";
@@ -464,7 +474,7 @@ function buildCoverPage(doc, bridge, cert, F, rid) {
 
 // ─── PAGE 2: 11-Criterion Assessment Table ────────────────────────────────────
 
-function buildCriteriaTablePage(doc, cert, F) {
+function buildCriteriaTablePage(doc: any, cert: any, F: string) {
   doc.addPage();
   let y = 18;
 
@@ -507,7 +517,7 @@ function buildCriteriaTablePage(doc, cert, F) {
   doc.setFontSize(11);
   doc.setTextColor(156, 163, 175);
 
-  const headers = [
+  const headers: Array<[string, { x: number; w: number }]> = [
     ["#",           COL.rank],
     ["CRITERION",   COL.name],
     ["SCORE",       COL.score],
@@ -652,7 +662,7 @@ function buildCriteriaTablePage(doc, cert, F) {
   y += 4;
   y = sectionTitle(doc, "Confidence Distribution", y, F);
 
-  const confGroups = { high: 0, medium: 0, low: 0 };
+  const confGroups: Record<string, number> = { high: 0, medium: 0, low: 0 };
   for (const cr of criteria) {
     const key = (cr.confidence || "low").toLowerCase();
     if (key in confGroups) confGroups[key]++;
@@ -660,7 +670,7 @@ function buildCriteriaTablePage(doc, cert, F) {
   const total = criteria.length || 1;
 
   const barGroupW = CONTENT_W;
-  const segColors = { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" };
+  const segColors: Record<string, string> = { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" };
   let segX = MARGIN;
 
   doc.setFont(F, "bold");
@@ -685,7 +695,7 @@ function buildCriteriaTablePage(doc, cert, F) {
 
 // ─── PAGE 3: Criterion Details ────────────────────────────────────────────────
 
-function buildCriterionDetailsPage(doc, cert, F) {
+function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
   doc.addPage();
   let y = 18;
 
@@ -703,7 +713,7 @@ function buildCriterionDetailsPage(doc, cert, F) {
   y = hRule(doc, y);
 
   const criteria = (cert.criteria_results || []).filter(
-    (cr) => (cr.score ?? 0) >= 2.5 || cr.requires_field_verification
+    (cr: any) => (cr.score ?? 0) >= 2.5 || cr.requires_field_verification
   );
 
   if (criteria.length === 0) {
@@ -857,7 +867,7 @@ function buildCriterionDetailsPage(doc, cert, F) {
 
 // ─── PAGE 4: Field Inspection Priorities & Data Traceability ─────────────────
 
-function buildFieldInspectionPage(doc, cert, bridge, F) {
+function buildFieldInspectionPage(doc: any, cert: any, bridge: any, F: string) {
   doc.addPage();
   let y = 18;
 
@@ -1052,7 +1062,7 @@ function buildFieldInspectionPage(doc, cert, bridge, F) {
 
 // ─── PAGE 5+: Street View Imagery & Defect Analysis (preserved) ───────────────
 
-async function buildImageryPages(doc, bridge, F) {
+async function buildImageryPages(doc: any, bridge: any, F: string) {
   const perHeading = bridge.per_heading_assessments || {};
 
   const fetchResults = await Promise.all(
@@ -1064,7 +1074,9 @@ async function buildImageryPages(doc, bridge, F) {
     })
   );
 
-  const validImages = fetchResults.filter((r) => r.img !== null);
+  const validImages = fetchResults.filter(
+    (r): r is { heading: any; va: any; img: OverlayImage } => r.img !== null
+  );
 
   if (validImages.length === 0) return;
 
@@ -1153,7 +1165,7 @@ async function buildImageryPages(doc, bridge, F) {
         doc.setFont(F, "bold");
         doc.setFontSize(9.5);
         doc.setTextColor(31, 41, 55);
-        const defectLabel = d.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const defectLabel = d.key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
         doc.text(defectLabel, MARGIN + 4, y + 3.5);
 
         // Severity chip
@@ -1201,7 +1213,7 @@ async function buildImageryPages(doc, bridge, F) {
 
 // ─── Main PDF builder ─────────────────────────────────────────────────────────
 
-async function buildPdf(bridge) {
+async function buildPdf(bridge: any) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const sectionErrors: string[] = [];
 
@@ -1213,7 +1225,7 @@ async function buildPdf(bridge) {
   // ── PAGE 1: Cover + Executive Summary ─────────────────────────────────────
   try {
     buildCoverPage(doc, bridge, cert, F, rid);
-  } catch (e) {
+  } catch (e: unknown) {
     console.error("[PDF] Cover page error:", e);
     sectionErrors.push("Cover page");
   }
@@ -1222,7 +1234,7 @@ async function buildPdf(bridge) {
   if (cert?.criteria_results?.length > 0) {
     try {
       buildCriteriaTablePage(doc, cert, F);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("[PDF] Criteria table error:", e);
       sectionErrors.push("Criteria table");
     }
@@ -1232,7 +1244,7 @@ async function buildPdf(bridge) {
   if (cert?.criteria_results?.length > 0) {
     try {
       buildCriterionDetailsPage(doc, cert, F);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("[PDF] Criterion details error:", e);
       sectionErrors.push("Criterion details");
     }
@@ -1271,7 +1283,7 @@ async function buildPdf(bridge) {
         }
       }
     }
-  } catch (e) {
+  } catch (e: unknown) {
     console.error("[PDF] Field inspection page error:", e);
     sectionErrors.push("Field inspection");
   }
@@ -1279,7 +1291,7 @@ async function buildPdf(bridge) {
   // ── PAGE 5+: Street View Imagery & Defect Analysis ───────────────────────
   try {
     await buildImageryPages(doc, bridge, F);
-  } catch (e) {
+  } catch (e: unknown) {
     console.error("[PDF] Imagery pages error:", e);
     sectionErrors.push("Imagery");
   }
@@ -1296,7 +1308,7 @@ async function buildPdf(bridge) {
 
 // ─── Button component ─────────────────────────────────────────────────────────
 
-export default function ReportExport({ bridge }) {
+export default function ReportExport({ bridge }: { bridge: any }) {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -1316,9 +1328,10 @@ export default function ReportExport({ bridge }) {
         });
       }
       setTimeout(() => setDone(false), 2000);
-    } catch (err) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error("PDF generation error:", err);
-      toast.error("PDF generation failed", { description: err.message });
+      toast.error("PDF generation failed", { description: message });
     } finally {
       setLoading(false);
     }
