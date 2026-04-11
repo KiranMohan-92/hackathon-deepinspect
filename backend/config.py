@@ -4,9 +4,9 @@ from pydantic import field_validator
 
 
 class Settings(BaseSettings):
-    # Core API keys
-    GEMINI_API_KEY: str
-    GOOGLE_MAPS_API_KEY: str
+    # Core API keys (empty = degraded mode, app starts but AI features unavailable)
+    GEMINI_API_KEY: str = ""
+    GOOGLE_MAPS_API_KEY: str = ""
 
     # Infrastructure
     REDIS_URL: str = "redis://localhost:6379"
