@@ -732,7 +732,7 @@ Check `ENVIRONMENT`, `AUTH_ENABLED`, `DEMO_MODE`, `JWT_SECRET`, and `DATABASE_UR
 | Layer | Technology |
 |-------|------------|
 | Backend API | Python 3.11+, FastAPI `0.115.0`, uvicorn `0.30.0`, Pydantic `2.8.0` |
-| AI | Google Gemini text and vision via `google-generativeai` |
+| AI | Google Gemini text and vision via `google-genai` |
 | Persistence | SQLAlchemy async `2.x`, SQLite via `aiosqlite`, PostgreSQL as production target, Alembic |
 | Resilience | Circuit breakers, retry/backoff, timeouts |
 | Logging | `structlog` with console and JSON renderers |
