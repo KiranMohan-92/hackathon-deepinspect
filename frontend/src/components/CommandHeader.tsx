@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Activity, Shield, BarChart3, Scan, Wifi, WifiOff, Clock } from "lucide-react";
+import { Activity, Shield, BarChart3, Scan, Wifi, WifiOff, Clock, MoonStar, SunMedium } from "lucide-react";
 import { motion } from "framer-motion";
 import useAppStore from "../store/useAppStore";
 import useHealthCheck from "../hooks/useHealthCheck";
@@ -17,6 +17,8 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
   const bridges = useAppStore((s) => s.bridges);
   const analyzedBridges = useAppStore((s) => s.analyzedBridges);
   const isLoading = useAppStore((s) => s.isLoading);
+  const theme = useAppStore((s) => s.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
   const health = useHealthCheck();
   const [time, setTime] = useState(new Date());
 
@@ -26,6 +28,7 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
   }, []);
 
   const reports = Object.values(analyzedBridges);
+  const ThemeIcon = theme === "dark" ? MoonStar : SunMedium;
   const counts = TIERS.reduce((acc, t) => {
     acc[t] = reports.filter((r) => r.risk_tier === t).length;
     return acc;
@@ -42,8 +45,8 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
           <div className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{
               background: "linear-gradient(135deg, rgba(0, 229, 255, 0.12), rgba(212, 175, 55, 0.08))",
-              border: "1px solid rgba(0, 229, 255, 0.15)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+              border: "1px solid rgb(var(--color-accent) / 0.15)",
+              boxShadow: "inset 0 1px 0 rgb(var(--color-white) / 0.04)",
             }}
           >
             <Shield className="w-4 h-4 text-accent" />
@@ -52,8 +55,8 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
             <motion.div
               className="absolute -inset-0.5 rounded-lg"
               style={{
-                border: "1px solid rgba(0, 229, 255, 0.3)",
-                boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)",
+                border: "1px solid rgb(var(--color-accent) / 0.3)",
+                boxShadow: "0 0 12px rgb(var(--color-accent) / 0.25)",
               }}
               animate={{ opacity: [0.4, 0.8, 0.4], scale: [1, 1.05, 1] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -90,7 +93,7 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
         <div
           className="w-1.5 h-1.5 rounded-full"
           style={{
-            backgroundColor: health.status === "ok" ? "#00e676" : health.status === "offline" ? "#ff1744" : "rgba(255,255,255,0.3)",
+            backgroundColor: health.status === "ok" ? "#00e676" : health.status === "offline" ? "#ff1744" : "rgb(var(--color-white) / 0.3)",
             boxShadow: health.status === "ok" ? "0 0 6px rgba(0,230,118,0.5)" : health.status === "offline" ? "0 0 6px rgba(255,23,68,0.5)" : "none",
           }}
         />
@@ -153,6 +156,16 @@ export default function CommandHeader({ showStats, onToggleStats }: CommandHeade
       )}
 
       <div className="flex-1" />
+
+      <button
+        onClick={toggleTheme}
+        className="glass-button flex items-center gap-1.5 px-2.5 py-1.5 text-2xs font-mono font-medium tracking-wider"
+        aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+        title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+      >
+        <ThemeIcon className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">{theme.toUpperCase()}</span>
+      </button>
 
       {/* Intel toggle — gold accent when active */}
       <button

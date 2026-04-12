@@ -40,8 +40,11 @@ class ScourAssessment(BaseModel):
     countermeasure_condition: Optional[str] = None  # "good", "degraded", "failed", None
 
     # Scoring
-    scour_risk_score: float = 1.0                # 1.0-5.0
+    scour_risk_score: Optional[float] = None     # 1.0-5.0 when assessed
+    assessment_status: str = "not_assessed"      # "assessed" | "estimated" | "not_assessed"
     confidence: str = "low"                       # "low" | "medium" | "high"
     requires_field_inspection: bool = True         # almost always True for water crossings
     field_inspection_scope: Optional[str] = None   # e.g., "Underwater sonar survey for pier scour depth"
     data_sources: list[str] = []
+    waterway_query_succeeded: bool = False
+    visual_assessment_ran: bool = False

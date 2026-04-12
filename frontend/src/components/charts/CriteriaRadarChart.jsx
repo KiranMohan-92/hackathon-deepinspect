@@ -9,6 +9,7 @@ const SEVERITY_COLORS = {
 };
 
 function scoreColor(score) {
+  if (score == null) return "#9ca3af";
   if (score >= 4) return SEVERITY_COLORS[5];
   if (score >= 3) return SEVERITY_COLORS[4];
   if (score >= 2) return SEVERITY_COLORS[3];
@@ -74,7 +75,28 @@ function CustomAxisTick({ x, y, payload }) {
 export default function CriteriaRadarChart({ certificate }) {
   if (!certificate?.criteria_results?.length) return null;
 
-  const data = certificate.criteria_results.map((c) => ({
+  const allCriteria = certificate.criteria_results;
+  const assessedCriteria = allCriteria.filter(
+    (c) => c.score != null && c.included_in_overall_risk !== false,
+  );
+  const excludedCount = allCriteria.length - assessedCriteria.length;
+
+  if (assessedCriteria.length === 0) {
+    return (
+      <div className="glass-panel p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-label">PHYSICS HEALTH PROFILE</p>
+          <span className="text-2xs font-mono text-dim">0 assessed criteria</span>
+        </div>
+        <p className="text-xs text-dim leading-relaxed">
+          No criterion had enough remote evidence to be plotted. The overall score is preliminary and
+          based on metadata screening only.
+        </p>
+      </div>
+    );
+  }
+
+  const data = assessedCriteria.map((c) => ({
     shortName: SHORT_LABELS[c.criterion_name] || c.criterion_name.split(" ")[0],
     fullName: c.criterion_name,
     rank: c.criterion_rank,
@@ -107,6 +129,9 @@ export default function CriteriaRadarChart({ certificate }) {
       <div className="flex items-center justify-between mb-3">
         <p className="text-label">PHYSICS HEALTH PROFILE</p>
         <div className="flex items-center gap-2">
+          <span className="text-2xs font-mono text-dim">
+            {assessedCriteria.length}/{allCriteria.length} assessed
+          </span>
           <span
             className="text-xs font-mono font-bold"
             style={{ color: stroke }}
@@ -155,6 +180,13 @@ export default function CriteriaRadarChart({ certificate }) {
         <div className="mt-2 pt-2 border-t border-glass-border">
           <p className="text-2xs font-mono text-severity-high">
             ⚠ {certificate.priority_field_inspections.length} FIELD INSPECTION(S) RECOMMENDED
+          </p>
+        </div>
+      )}
+      {excludedCount > 0 && (
+        <div className="mt-2 pt-2 border-t border-glass-border">
+          <p className="text-2xs font-mono text-dim">
+            {excludedCount} criterion/criteria excluded because remote evidence was insufficient.
           </p>
         </div>
       )}

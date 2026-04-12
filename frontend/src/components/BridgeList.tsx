@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import useAppStore from "../store/useAppStore";
@@ -35,17 +35,23 @@ function roadClassBadge(rc?: string) {
   );
 }
 
-const BridgeList = React.memo(() => {
+interface BridgeListProps {
+  compact?: boolean;
+}
+
+const BridgeList = React.memo(({ compact = false }: BridgeListProps) => {
   const [roadTab, setRoadTab] = useState("ALL");
   const bridges = useAppStore((s) => s.bridges);
   const analyzedBridges = useAppStore((s) => s.analyzedBridges);
   const analyzingBridgeIds = useAppStore((s) => s.analyzingBridgeIds);
   const checkedBridgeIds = useAppStore((s) => s.checkedBridgeIds);
+  const selectedBridgeId = useAppStore((s) => s.selectedBridgeId);
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
   const toggleCheckedBridge = useAppStore((s) => s.toggleCheckedBridge);
   const setCheckedBridges = useAppStore((s) => s.setCheckedBridges);
   const clearCheckedBridges = useAppStore((s) => s.clearCheckedBridges);
   const { analyzeMultipleBridges } = useBridgeAnalyze();
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const sorted = useMemo(() => {
     return [...bridges].sort((a, b) => {
@@ -78,10 +84,18 @@ const BridgeList = React.memo(() => {
     analyzeMultipleBridges(selected);
   }, [sorted, checkedBridgeIds, analyzeMultipleBridges]);
 
+  useEffect(() => {
+    if (!selectedBridgeId) return;
+    rowRefs.current[selectedBridgeId]?.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [selectedBridgeId]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-glass-border flex-shrink-0">
+      <div className={`px-4 border-b border-glass-border flex-shrink-0 ${compact ? "py-2.5" : "py-3"}`}>
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-2 cursor-pointer min-w-0">
             <input
@@ -122,7 +136,7 @@ const BridgeList = React.memo(() => {
         </p>
 
         {/* Road class tabs */}
-        <div className="flex gap-1 mt-2 pl-5 overflow-x-auto" role="tablist" aria-label="Filter by road class">
+        <div className={`flex gap-1 pl-5 overflow-x-auto ${compact ? "mt-1.5" : "mt-2"}`} role="tablist" aria-label="Filter by road class">
           {ROAD_TABS.map((tab) => {
             const count = tab === "ALL" ? bridges.length : bridges.filter((b) => roadTabMatch(tab, (b as any).road_class)).length;
             if (count === 0 && tab !== "ALL") return null;
@@ -157,16 +171,25 @@ const BridgeList = React.memo(() => {
           const report = analyzedBridges[bridge.osm_id];
           const isAnalyzing = !!analyzingBridgeIds[bridge.osm_id];
           const isChecked = !!checkedBridgeIds[bridge.osm_id];
+          const isSelected = selectedBridgeId === bridge.osm_id;
           const riskColor = report ? (RISK_COLORS[report.risk_tier] || RISK_COLORS.OK) : null;
 
           return (
             <motion.div
               key={bridge.osm_id}
+              ref={(node) => { rowRefs.current[bridge.osm_id] = node; }}
               variants={staggerItem}
               role="listitem"
+              aria-current={isSelected ? "true" : undefined}
+              data-selected={isSelected ? "true" : "false"}
               className={`w-full border-b border-glass-border flex items-start gap-2 px-3 py-3 transition-colors ${
-                isChecked ? "bg-accent/5" : "hover:bg-surface-1"
+                isSelected
+                  ? "bg-accent/10"
+                  : isChecked
+                  ? "bg-accent/5"
+                  : "hover:bg-surface-1"
               }`}
+              style={isSelected ? { boxShadow: "inset 2px 0 0 rgba(0, 229, 255, 0.8)" } : undefined}
             >
               {/* Checkbox */}
               <input
@@ -195,7 +218,7 @@ const BridgeList = React.memo(() => {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <p className="text-sm font-medium text-white truncate">
+                    <p className={`text-sm font-medium truncate ${isSelected ? "text-accent" : "text-white"}`}>
                       {bridge.name || `Bridge ${bridge.osm_id}`}
                     </p>
                     {isAnalyzing ? (

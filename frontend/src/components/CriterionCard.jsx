@@ -18,15 +18,24 @@ const SCORE_COLORS = {
 };
 
 function scoreStyle(score) {
+  if (score == null) return SCORE_COLORS.unknown;
   if (score >= 4) return SCORE_COLORS.critical;
   if (score >= 3) return SCORE_COLORS.high;
   if (score >= 2) return SCORE_COLORS.moderate;
   return SCORE_COLORS.low;
 }
 
+function assessmentStatusLabel(status) {
+  if (status === "not_assessed") return "NOT ASSESSED";
+  if (status === "estimated") return "ESTIMATED";
+  return "ASSESSED";
+}
+
 export default function CriterionCard({ criterion, index }) {
   const [expanded, setExpanded] = useState(false);
   const style = scoreStyle(criterion.score);
+  const scoreLabel = criterion.score != null ? criterion.score.toFixed(1) : "N/A";
+  const statusLabel = assessmentStatusLabel(criterion.assessment_status);
 
   return (
     <motion.div
@@ -52,12 +61,12 @@ export default function CriterionCard({ criterion, index }) {
 
         {/* Score */}
         <span className={`text-xs font-mono font-bold ${style.text}`}>
-          {criterion.score.toFixed(1)}
+          {scoreLabel}
         </span>
 
         {/* Confidence dot */}
         <span className={`text-2xs font-mono ${CONFIDENCE_COLORS[criterion.confidence]}`}>
-          {criterion.confidence[0].toUpperCase()}
+          {criterion.confidence?.[0]?.toUpperCase() || "?"}
         </span>
 
         {/* Field inspection flag */}
@@ -106,6 +115,12 @@ export default function CriterionCard({ criterion, index }) {
               <p className="text-label mb-0.5">CONFIDENCE</p>
               <p className={`text-2xs font-mono font-bold ${CONFIDENCE_COLORS[criterion.confidence]}`}>
                 {criterion.confidence.toUpperCase()}
+              </p>
+            </div>
+            <div>
+              <p className="text-label mb-0.5">STATUS</p>
+              <p className="text-2xs font-mono font-bold text-dim">
+                {statusLabel}
               </p>
             </div>
           </div>

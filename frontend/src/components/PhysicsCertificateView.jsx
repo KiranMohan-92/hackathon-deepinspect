@@ -16,6 +16,11 @@ export default function PhysicsCertificateView({ certificate }) {
   if (!certificate) return null;
 
   const tier = TIER_STYLES[certificate.overall_risk_tier] || TIER_STYLES.MEDIUM;
+  const totalCriteria = certificate.criteria_results?.length || 0;
+  const assessedCount = certificate.criteria_results?.filter(
+    (c) => c.score != null && c.included_in_overall_risk !== false,
+  ).length || 0;
+  const unassessedCount = totalCriteria - assessedCount;
   const fieldCount = certificate.criteria_results?.filter((c) => c.requires_field_verification).length || 0;
 
   return (
@@ -47,6 +52,14 @@ export default function PhysicsCertificateView({ certificate }) {
             <p className="text-sm font-mono font-bold text-white uppercase">
               {certificate.overall_confidence}
             </p>
+            <p className="text-2xs font-mono text-dim mt-1">
+              {assessedCount}/{totalCriteria} criteria scored
+            </p>
+            {unassessedCount > 0 && (
+              <p className="text-2xs font-mono text-dim mt-1">
+                {unassessedCount} not assessed remotely
+              </p>
+            )}
             {fieldCount > 0 && (
               <p className="text-2xs font-mono text-severity-high mt-1">
                 {fieldCount} criteria need field verification

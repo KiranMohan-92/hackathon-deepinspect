@@ -3,10 +3,20 @@ You are a senior structural engineer writing an infrastructure risk assessment r
 Bridge: {bridge_name} at coordinates {lat}, {lon}
 Visual Assessment: {visual_assessment_json}
 Context Data: {context_json}
+Criteria Assessment: {criteria_json}
+Scour Assessment: {scour_json}
+Structural Assessment: {structural_json}
+Degradation Assessment: {degradation_json}
 Computed Risk Score: {base_score} out of 5.0
 Risk Tier: {tier}
 
 IMPORTANT: Before writing the report, reason through the evidence step by step. Populate "thinking_steps" with 4-6 steps showing how you weighed the visual findings against context data, age, traffic load, and incident history to arrive at the risk tier and recommended action.
+
+CRITICAL GROUNDING RULES:
+- Use only the evidence provided in the JSON blocks above.
+- If a criterion has "assessment_status": "not_assessed", do not describe that domain as if it was observed.
+- Do not invent structural condition details, scour indicators, degradation mechanisms, or maintenance actions that are not supported by the provided evidence.
+- When evidence is incomplete, say so plainly in "confidence_caveat".
 
 Write a concise professional assessment. Respond with this exact JSON structure:
 {{

@@ -18,7 +18,9 @@ from services.decision_service import compute_decision
 
 log = get_logger(__name__)
 
-REPORT_PROMPT_TEMPLATE = Path("prompts/risk_report_prompt.txt").read_text()
+REPORT_PROMPT_TEMPLATE = (
+    Path(__file__).resolve().parents[1] / "prompts" / "risk_report_prompt.txt"
+).read_text()
 
 
 async def generate_report(
@@ -38,9 +40,19 @@ async def generate_report(
     cert = None
     authoritative_score = None
     authoritative_tier = None
+    criteria: list[CriterionResult] = []
+    scored_criteria: list[CriterionResult] = []
     try:
         criteria = compute_criterion_scores(visual, ctx, scour, structural, degradation)
-        overall_score, overall_conf = compute_weighted_risk_score(criteria)
+        scored_criteria = [
+            c for c in criteria
+            if c.score is not None and c.included_in_overall_risk
+        ]
+        if scored_criteria:
+            overall_score, overall_conf = compute_weighted_risk_score(criteria)
+        else:
+            overall_score = compute_base_risk_score(visual, ctx)
+            overall_conf = "low"
         authoritative_score = round(overall_score, 2)
         authoritative_tier = score_to_tier(overall_score)
 
@@ -61,6 +73,15 @@ async def generate_report(
             for c in criteria
             if c.confidence == "low" and c.requires_field_verification
         ]
+        limitations.extend(
+            f"Criterion '{c.criterion_name}' was not assessed remotely and is excluded from the overall risk score"
+            for c in criteria
+            if c.assessment_status == "not_assessed"
+        )
+        if not scored_criteria:
+            limitations.append(
+                "No engineering criteria could be scored from the available evidence; the overall score falls back to preliminary metadata screening."
+            )
 
         cert = PhysicsHealthCertificate(
             bridge_id=bridge.osm_id,
@@ -81,7 +102,7 @@ async def generate_report(
         )
 
         # Phase 3: EU ratings, cost estimation, decision policy
-        max_criterion_score = max((c.score for c in criteria), default=overall_score)
+        max_criterion_score = max((c.score for c in scored_criteria), default=overall_score)
         # IQOA S suffix: only for criterion rank 11 (railing/safety) with user-safety finding
         has_safety_finding = any(
             c.score >= 4.0 and c.criterion_rank == 11
@@ -93,7 +114,7 @@ async def generate_report(
 
         # Cost estimation: extract defect tokens from criterion names for bracket matching
         defect_tokens = []
-        for c in criteria:
+        for c in scored_criteria:
             if c.score >= 3.5:
                 name_token = c.criterion_name.lower().replace(" ", "_").replace("/", "_")
                 defect_tokens.append(name_token)
@@ -125,20 +146,29 @@ async def generate_report(
 
     # ── Step 2: Generate narrative using the AUTHORITATIVE score/tier ────────────
     narrative = {
-        "condition_summary": "Automated assessment unavailable. Manual review required.",
-        "key_risk_factors": ["Assessment failed — manual review required"],
+        "condition_summary": "Remote condition narrative withheld because the available evidence is insufficient for a grounded assessment.",
+        "key_risk_factors": ["Insufficient remote evidence for a condition narrative"],
         "recommended_action": "Manual inspection required",
         "maintenance_notes": [],
-        "confidence_caveat": "Analysis error — results are based on age/metadata heuristics only.",
+        "confidence_caveat": "Insufficient remote evidence. Any overall score is preliminary and must be verified in the field.",
     }
 
+    has_narrative_evidence = bool(visual) or bool(scored_criteria)
+
     try:
+        if not has_narrative_evidence:
+            raise ValueError("insufficient_evidence_for_grounded_narrative")
+
         prompt = REPORT_PROMPT_TEMPLATE.format(
             bridge_name=bridge.name or f"Bridge {bridge.osm_id}",
             lat=bridge.lat,
             lon=bridge.lon,
             visual_assessment_json=visual.model_dump_json() if visual else "{}",
             context_json=ctx.model_dump_json(),
+            criteria_json=json.dumps([c.model_dump(mode="json") for c in criteria]),
+            scour_json=scour.model_dump_json() if scour else "null",
+            structural_json=structural.model_dump_json() if structural else "null",
+            degradation_json=degradation.model_dump_json() if degradation else "null",
             base_score=authoritative_score,
             tier=authoritative_tier,
         )
@@ -176,7 +206,10 @@ async def generate_report(
                         "step": step,
                     })
     except Exception as e:
-        log.error("narrative_generation_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
+        if str(e) == "insufficient_evidence_for_grounded_narrative":
+            log.warning("narrative_generation_skipped", bridge_id=bridge.osm_id, reason=str(e))
+        else:
+            log.error("narrative_generation_failed", bridge_id=bridge.osm_id, error=str(e), exc_info=True)
 
     report_thinking = narrative.pop("thinking_steps", [])
 

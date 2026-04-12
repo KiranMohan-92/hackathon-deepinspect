@@ -26,7 +26,7 @@ const slidePanel = {
   exit: { opacity: 0, x: 20, transition: { duration: 0.2 } },
 };
 
-// ─── Metadata item ───────────────────────────────────────────────────────────
+// ─── Metadata item ─────────────────────────────────────────────────────────────
 interface MetaItemProps {
   label: string;
   value: string | number | null | undefined;
@@ -42,7 +42,7 @@ function MetaItem({ label, value }: MetaItemProps) {
   );
 }
 
-// ─── Thinking Feed (live AI reasoning) ──────────────────────────────────────
+// ─── Thinking Feed (live AI reasoning) ─────────────────────────────────────────
 const STAGE_META: Record<string, { icon: typeof Eye; label: string; color: string }> = {
   vision: { icon: Eye, label: "VISION", color: "text-accent" },
   context: { icon: BookOpen, label: "CONTEXT", color: "intel-accent" },
@@ -101,7 +101,7 @@ function ThinkingFeed({ osm_id }: { osm_id: string }) {
   );
 }
 
-// ─── Pre-analysis view ───────────────────────────────────────────────────────
+// ─── Pre-analysis view ─────────────────────────────────────────────────────────
 function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
   const { analyzeOneBridge } = useBridgeAnalyze();
   const analyzingBridgeIds = useAppStore((s) => s.analyzingBridgeIds);
@@ -196,7 +196,7 @@ function BridgePreAnalysis({ bridge }: { bridge: BridgeSummary }) {
   );
 }
 
-// ─── Post-analysis report ────────────────────────────────────────────────────
+// ─── Post-analysis report ──────────────────────────────────────────────────────
 function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: any }) {
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
 
@@ -323,7 +323,7 @@ function BridgeReport({ bridge, report }: { bridge: BridgeSummary; report: any }
   );
 }
 
-// ─── Empty state ─────────────────────────────────────────────────────────────
+// ─── Empty state ───────────────────────────────────────────────────────────────
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-4">
@@ -343,7 +343,7 @@ function EmptyState() {
   );
 }
 
-// ─── Step icon ───────────────────────────────────────────────────────────────
+// ─── Step icon ─────────────────────────────────────────────────────────────────
 function StepIcon({ status }: { status: string }) {
   if (status === "ok") return <CheckCircle className="w-3.5 h-3.5 text-severity-ok flex-shrink-0" />;
   if (status === "failed") return <XCircle className="w-3.5 h-3.5 text-severity-critical flex-shrink-0" />;
@@ -358,7 +358,7 @@ function messageColor(status: string) {
   return "text-dim";
 }
 
-// ─── Loading state ───────────────────────────────────────────────────────────
+// ─── Loading state ─────────────────────────────────────────────────────────────
 function LoadingState() {
   const scanProgress = useAppStore((s) => s.scanProgress);
 
@@ -392,7 +392,7 @@ function LoadingState() {
   );
 }
 
-// ─── Main side panel ─────────────────────────────────────────────────────────
+// ─── Main side panel ───────────────────────────────────────────────────────────
 export default function BridgePanel() {
   const selectedBridgeId = useAppStore((s) => s.selectedBridgeId);
   const bridges = useAppStore((s) => s.bridges);
@@ -401,24 +401,30 @@ export default function BridgePanel() {
 
   const selectedBridge = bridges.find((b) => b.osm_id === selectedBridgeId) || null;
   const report = selectedBridgeId ? analyzedBridges[selectedBridgeId] : null;
+  const detailView = selectedBridge
+    ? (report ? <BridgeReport key="report" bridge={selectedBridge} report={report} /> : <BridgePreAnalysis key="pre" bridge={selectedBridge} />)
+    : null;
 
   return (
-    <div className="w-96 flex-shrink-0 border-l border-glass-border bg-glass-heavy flex flex-col overflow-hidden">
-      <AnimatePresence mode="wait">
-        {selectedBridge ? (
-          report ? (
-            <BridgeReport key="report" bridge={selectedBridge} report={report} />
-          ) : (
-            <BridgePreAnalysis key="pre" bridge={selectedBridge} />
-          )
-        ) : isLoading ? (
-          <LoadingState key="loading" />
-        ) : bridges.length > 0 ? (
-          <BridgeList key="list" />
+    <div className="w-[30rem] flex-shrink-0 border-l border-glass-border bg-glass-heavy flex flex-col overflow-hidden">
+      {bridges.length > 0 ? (
+        detailView ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-[15rem] max-h-[18rem] border-b border-glass-border">
+              <BridgeList compact />
+            </div>
+            <div className="flex-1 min-h-0">
+              <AnimatePresence mode="wait">{detailView}</AnimatePresence>
+            </div>
+          </div>
         ) : (
-          <EmptyState key="empty" />
-        )}
-      </AnimatePresence>
+          <BridgeList key="list" />
+        )
+      ) : (
+        <AnimatePresence mode="wait">
+          {isLoading ? <LoadingState key="loading" /> : <EmptyState key="empty" />}
+        </AnimatePresence>
+      )}
     </div>
   );
 }

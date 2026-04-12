@@ -181,7 +181,8 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 
 // ─── Score / tier helpers ─────────────────────────────────────────────────────
 
-function scoreHex(score: number) {
+function scoreHex(score: number | null | undefined) {
+  if (score == null) return "#9CA3AF";
   if (score >= 4.0) return "#DC2626"; // CRITICAL
   if (score >= 3.0) return "#EA580C"; // HIGH
   if (score >= 2.0) return "#CA8A04"; // MEDIUM
@@ -196,11 +197,18 @@ function confidenceHex(conf: string | null | undefined) {
   return ({ high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" } as Record<string, string>)[conf?.toLowerCase() || ""] || "#9CA3AF";
 }
 
-function tierLabel(score: number) {
+function tierLabel(score: number | null | undefined) {
+  if (score == null) return "NOT ASSESSED";
   if (score >= 4.0) return "CRITICAL";
   if (score >= 3.0) return "HIGH";
   if (score >= 2.0) return "MEDIUM";
   return "OK";
+}
+
+function assessmentStatusLabel(status: string | null | undefined) {
+  if (status === "not_assessed") return "NOT ASSESSED";
+  if (status === "estimated") return "ESTIMATED";
+  return "ASSESSED";
 }
 
 // ─── PDF layout helpers ───────────────────────────────────────────────────────
@@ -232,14 +240,16 @@ function sectionTitle(doc: any, text: string, y: number, F: string) {
 }
 
 // Draw a horizontal score bar (score 0–5 scale)
-function drawScoreBar(doc: any, x: number, y: number, score: number, maxW: number) {
+function drawScoreBar(doc: any, x: number, y: number, score: number | null | undefined, maxW: number) {
   const barH  = 3;
-  const fillW = Math.max(0, Math.min(score / 5, 1)) * maxW;
+  const fillW = score == null ? 0 : Math.max(0, Math.min(score / 5, 1)) * maxW;
   const [r, g, b] = hexToRgb(scoreHex(score));
   doc.setFillColor(230, 230, 230);
   doc.rect(x, y, maxW, barH, "F");
-  doc.setFillColor(r, g, b);
-  doc.rect(x, y, fillW, barH, "F");
+  if (fillW > 0) {
+    doc.setFillColor(r, g, b);
+    doc.rect(x, y, fillW, barH, "F");
+  }
 }
 
 // Small inline chip (text only, coloured background)
@@ -347,7 +357,7 @@ function buildCoverPage(doc: any, bridge: any, cert: any, F: string, rid: string
 
   // Score
   doc.setFontSize(20);
-  doc.text(`${score.toFixed(1)}`, badgeX + 19, 31, { align: "center" });
+  doc.text(`${typeof score === "number" ? score.toFixed(1) : "N/A"}`, badgeX + 19, 31, { align: "center" });
 
   // /5.0 subscript
   doc.setFont(F, "normal");
@@ -488,11 +498,15 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
   doc.setFont(F, "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(107, 114, 128);
-  doc.text(`Physics-based evaluation across ${cert.criteria_results?.length || 0} engineering risk domains`, MARGIN, y + 4);
+  const criteria = cert.criteria_results || [];
+  const assessedCriteria = criteria.filter((cr: any) => cr.score != null && cr.included_in_overall_risk !== false);
+  const excludedCount = criteria.length - assessedCriteria.length;
+  const subtitle = excludedCount > 0
+    ? `${assessedCriteria.length} assessed domain(s), ${excludedCount} not assessed remotely`
+    : `Physics-based evaluation across ${criteria.length || 0} engineering risk domains`;
+  doc.text(subtitle, MARGIN, y + 4);
   y += 8;
   y = hRule(doc, y);
-
-  const criteria = cert.criteria_results || [];
 
   // ── Table header ──────────────────────────────────────────────────────────
   // Column definitions: x offset from MARGIN, width
@@ -578,7 +592,7 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
     doc.text(cr.score != null ? cr.score.toFixed(1) : "N/A", MARGIN + COL.score.x + 2, textY);
 
     // Score bar
-    drawScoreBar(doc, MARGIN + COL.bar.x, y + (ROW_H - 3) / 2, cr.score ?? 0, COL.bar.w - 4);
+    drawScoreBar(doc, MARGIN + COL.bar.x, y + (ROW_H - 3) / 2, cr.score, COL.bar.w - 4);
 
     // Confidence
     const confColor = confidenceHex(cr.confidence);
@@ -598,11 +612,21 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
     doc.text(probStr, MARGIN + COL.prob.x + 1, textY);
 
     // Status: field inspection required?
-    if (cr.requires_field_verification) {
+    if (cr.assessment_status === "not_assessed") {
+      doc.setFont(F, "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text("N/A", MARGIN + COL.status.x + 1, textY);
+    } else if (cr.requires_field_verification) {
       doc.setFont(F, "bold");
       doc.setFontSize(11);
       doc.setTextColor(146, 64, 14);
       doc.text("\u26A0 VERIFY", MARGIN + COL.status.x + 1, textY);
+    } else if (cr.assessment_status === "estimated") {
+      doc.setFont(F, "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(37, 99, 235);
+      doc.text("EST", MARGIN + COL.status.x + 1, textY);
     } else {
       doc.setFont(F, "normal");
       doc.setFontSize(11);
@@ -649,7 +673,7 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
   doc.setFontSize(11);
   doc.setTextColor(107, 114, 128);
   doc.text(
-    "Weighted composite of 11 physics-based criteria. Score reflects worst-case failure probability envelope.",
+    "Weighted composite of assessed criteria only. Domains without enough evidence are excluded and listed as limitations.",
     PAGE_W - MARGIN - 5,
     y + 7,
     { align: "right", maxWidth: 90 }
@@ -663,11 +687,11 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
   y = sectionTitle(doc, "Confidence Distribution", y, F);
 
   const confGroups: Record<string, number> = { high: 0, medium: 0, low: 0 };
-  for (const cr of criteria) {
+  for (const cr of assessedCriteria) {
     const key = (cr.confidence || "low").toLowerCase();
     if (key in confGroups) confGroups[key]++;
   }
-  const total = criteria.length || 1;
+  const total = assessedCriteria.length || 1;
 
   const barGroupW = CONTENT_W;
   const segColors: Record<string, string> = { high: "#16A34A", medium: "#CA8A04", low: "#9CA3AF" };
@@ -690,6 +714,18 @@ function buildCriteriaTablePage(doc: any, cert: any, F: string) {
   }
   y += 10;
 
+  if (excludedCount > 0) {
+    doc.setFont(F, "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text(
+      `${excludedCount} criterion/criteria were not assessed remotely and are excluded from the confidence distribution.`,
+      MARGIN,
+      y + 2,
+    );
+    y += 6;
+  }
+
   return y;
 }
 
@@ -708,12 +744,12 @@ function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
   doc.setFont(F, "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(107, 114, 128);
-  doc.text("Criteria with score \u22652.5 or requiring field verification", MARGIN, y + 4);
+  doc.text("Elevated-risk criteria and remote assessment gaps requiring field follow-up", MARGIN, y + 4);
   y += 10;
   y = hRule(doc, y);
 
   const criteria = (cert.criteria_results || []).filter(
-    (cr: any) => (cr.score ?? 0) >= 2.5 || cr.requires_field_verification
+    (cr: any) => cr.assessment_status === "not_assessed" || (cr.score ?? 0) >= 2.5 || cr.requires_field_verification
   );
 
   if (criteria.length === 0) {
@@ -725,7 +761,7 @@ function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
   }
 
   for (const cr of criteria) {
-    const hex = scoreHex(cr.score ?? 0);
+    const hex = scoreHex(cr.score);
     const [rr, rg, rb] = hexToRgb(hex);
 
     // Estimate block height
@@ -737,6 +773,7 @@ function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
 
     const blockH = 10                               // header
       + 3                                            // bar row
+      + 7                                            // status row
       + findings.length * 5                          // findings
       + (sources.length > 0 ? 10 : 0)               // sources row
       + (scopeLines.length > 0 ? scopeLines.length * 4.5 + 14 : 0) // scope box
@@ -770,9 +807,10 @@ function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
 
     // Score + tier chip inline
     const scoreStr = cr.score != null ? cr.score.toFixed(1) : "N/A";
-    const chipW    = drawChip(doc, `${scoreStr} / 5.0`, PAGE_W - MARGIN - 30, y + 5.5, hex, F);
-    const tierStr  = tierLabel(cr.score ?? 0);
-    drawChip(doc, tierStr, PAGE_W - MARGIN - 30 + chipW + 2, y + 5.5, hex, F);
+    const chipColor = cr.score != null ? hex : "#6B7280";
+    const chipW = drawChip(doc, `${scoreStr}${cr.score != null ? " / 5.0" : ""}`, PAGE_W - MARGIN - 30, y + 5.5, chipColor, F);
+    const tierStr = cr.score != null ? tierLabel(cr.score) : assessmentStatusLabel(cr.assessment_status);
+    drawChip(doc, tierStr, PAGE_W - MARGIN - 30 + chipW + 2, y + 5.5, chipColor, F);
 
     let cy = y + 10;
 
@@ -781,8 +819,15 @@ function buildCriterionDetailsPage(doc: any, cert: any, F: string) {
     doc.setFontSize(11);
     doc.setTextColor(107, 114, 128);
     doc.text("RISK LEVEL", innerX, cy);
-    drawScoreBar(doc, innerX + 22, cy - 2.5, cr.score ?? 0, 60);
+    drawScoreBar(doc, innerX + 22, cy - 2.5, cr.score, 60);
     cy += 6;
+
+    doc.setFont(F, "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(107, 114, 128);
+    doc.text("STATUS", innerX, cy);
+    drawChip(doc, assessmentStatusLabel(cr.assessment_status), innerX + 16, cy + 0.2, chipColor, F);
+    cy += 7;
 
     // Key findings
     if (findings.length > 0) {

@@ -29,11 +29,58 @@ CRITERION_WEIGHTS = {
     "ancillary":               0.03,
 }
 
+# Rank-keyed weights: immune to dict/list reordering.
+# Each key is the criterion_rank (1-11) carried by CriterionResult.
+RANK_TO_WEIGHT = {
+    1: 0.25,   # scour_foundations
+    2: 0.15,   # redundancy_load_path
+    3: 0.12,   # capacity_vs_demand
+    4: 0.10,   # substructure
+    5: 0.10,   # superstructure
+    6: 0.05,   # stability
+    7: 0.08,   # degradation
+    8: 0.05,   # bearings_joints
+    9: 0.04,   # deck_slab
+    10: 0.03,  # serviceability
+    11: 0.03,  # ancillary
+}
+
 CONFIDENCE_FACTORS = {
     "high": 1.0,
     "medium": 0.7,
     "low": 0.4,
 }
+
+
+def _build_criterion_result(
+    *,
+    criterion_rank: int,
+    criterion_name: str,
+    score: Optional[float],
+    confidence: str,
+    key_findings: list[str],
+    requires_field_verification: bool = False,
+    field_verification_scope: Optional[str] = None,
+    data_sources_used: Optional[list[str]] = None,
+    assessment_status: str = "assessed",
+    included_in_overall_risk: Optional[bool] = None,
+) -> CriterionResult:
+    if included_in_overall_risk is None:
+        included_in_overall_risk = score is not None and assessment_status != "not_assessed"
+
+    return CriterionResult(
+        criterion_rank=criterion_rank,
+        criterion_name=criterion_name,
+        score=score,
+        assessment_status=assessment_status,
+        included_in_overall_risk=included_in_overall_risk,
+        confidence=confidence,
+        key_findings=key_findings,
+        requires_field_verification=requires_field_verification,
+        field_verification_scope=field_verification_scope,
+        failure_mode_probability=_score_to_probability(score),
+        data_sources_used=data_sources_used or [],
+    )
 
 
 def score_to_tier(score: float) -> str:
@@ -122,15 +169,26 @@ def compute_criterion_scores(
         c1_scope = scour.field_inspection_scope
         c1_sources = scour.data_sources
     else:
-        # No scour agent data — score based on whether bridge crosses water
-        c1_score = 3.0  # assume moderate risk if unknown
+        c1_score = None
         c1_conf = "low"
         c1_findings = ["No hydrological assessment performed"]
         c1_field = True
         c1_scope = "Full scour assessment required"
         c1_sources = []
 
-    results.append(CriterionResult(
+    c1_status = "assessed"
+    if not scour or scour.assessment_status == "not_assessed" or c1_score is None:
+        c1_score = None
+        c1_conf = "low"
+        c1_findings = ["Hydrological assessment could not be completed from the available remote data"]
+        c1_field = True
+        c1_scope = "Hydrological and foundation assessment required before scoring this criterion"
+        c1_sources = []
+        c1_status = "not_assessed"
+    elif scour.assessment_status == "estimated":
+        c1_status = "estimated"
+
+    results.append(_build_criterion_result(
         criterion_rank=1,
         criterion_name="Scour / Foundations / Channel Stability",
         score=c1_score,
@@ -138,17 +196,19 @@ def compute_criterion_scores(
         key_findings=c1_findings,
         requires_field_verification=c1_field,
         field_verification_scope=c1_scope,
-        failure_mode_probability=_score_to_probability(c1_score),
         data_sources_used=c1_sources,
+        assessment_status=c1_status,
     ))
 
     # ── Criterion 2: Load-Path Redundancy ────────────────────────────
     if structural:
         # Fracture-critical bridges get automatic HIGH score
-        c2_score = 5.0 if structural.fracture_critical else (
-            4.0 if structural.redundancy_class == "LOW" else
-            2.5 if structural.redundancy_class == "MEDIUM" else
-            1.5
+        c2_score = None if structural.redundancy_class == "unknown" else (
+            5.0 if structural.fracture_critical else (
+                4.0 if structural.redundancy_class == "LOW" else
+                2.5 if structural.redundancy_class == "MEDIUM" else
+                1.5
+            )
         )
         c2_conf = structural.structure_type_confidence
         c2_findings = []
@@ -157,27 +217,33 @@ def compute_criterion_scores(
         c2_findings.append(f"Structure type: {structural.structure_type}, redundancy: {structural.redundancy_class}")
         c2_sources = structural.data_sources
     else:
-        c2_score = 3.0
+        c2_score = None
         c2_conf = "low"
-        c2_findings = ["Structural type not yet classified"]
+        c2_findings = ["Structural type could not be classified from the available evidence"]
         c2_sources = []
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=2,
         criterion_name="Load-Path Continuity & Redundancy (NSTM)",
         score=c2_score,
         confidence=c2_conf,
         key_findings=c2_findings,
         requires_field_verification=structural.requires_load_rating if structural else True,
-        field_verification_scope="Hands-on NSTM inspection required" if (structural and structural.fracture_critical) else None,
-        failure_mode_probability=_score_to_probability(c2_score),
+        field_verification_scope=(
+            "Hands-on NSTM inspection required"
+            if (structural and structural.fracture_critical)
+            else "Structural system and redundancy must be verified in the field"
+            if c2_score is None
+            else None
+        ),
         data_sources_used=c2_sources,
+        assessment_status="estimated" if c2_score is not None else "not_assessed",
     ))
 
     # ── Criterion 3: Capacity vs. Demand ─────────────────────────────
     if structural:
-        c3_map = {"adequate": 1.5, "marginal": 3.5, "insufficient": 5.0, "unknown": 3.0}
-        c3_score = c3_map.get(structural.capacity_vs_demand_flag, 3.0)
+        c3_map = {"adequate": 1.5, "marginal": 3.5, "insufficient": 5.0}
+        c3_score = c3_map.get(structural.capacity_vs_demand_flag)
         c3_conf = "low"  # capacity estimation without drawings is always low confidence
         c3_findings = [f"Estimated capacity class: {structural.estimated_capacity_class}"]
         if structural.posted_weight_limit_tons:
@@ -185,12 +251,12 @@ def compute_criterion_scores(
         c3_findings.append(f"Capacity vs demand: {structural.capacity_vs_demand_flag}")
         c3_sources = structural.data_sources
     else:
-        c3_score = 3.0
+        c3_score = None
         c3_conf = "low"
         c3_findings = ["No capacity assessment performed"]
         c3_sources = []
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=3,
         criterion_name="Capacity vs. Demand (Load Rating)",
         score=c3_score,
@@ -198,8 +264,8 @@ def compute_criterion_scores(
         key_findings=c3_findings,
         requires_field_verification=True,  # always — we don't have drawings
         field_verification_scope="Engineering load rating with structural drawings required for posting decisions",
-        failure_mode_probability=_score_to_probability(c3_score),
         data_sources_used=c3_sources,
+        assessment_status="estimated" if c3_score is not None else "not_assessed",
     ))
 
     # ── Criterion 4: Substructure Integrity ──────────────────────────
@@ -221,20 +287,24 @@ def compute_criterion_scores(
         if not c4_findings:
             c4_findings = [f"Structural deformation score: {visual.structural_deformation.score}/5"]
     else:
-        c4_score = 3.0
+        c4_score = None
         c4_conf = "low"
         c4_findings = ["No visual assessment of substructure"]
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=4,
         criterion_name="Substructure Integrity (Piers, Abutments, Pile Caps)",
         score=c4_score,
         confidence=c4_conf,
         key_findings=c4_findings,
-        requires_field_verification=c4_score >= 3.0,
-        field_verification_scope="Close-range substructure inspection for crack mapping and settlement survey" if c4_score >= 3.0 else None,
-        failure_mode_probability=_score_to_probability(c4_score),
+        requires_field_verification=(c4_score is None) or c4_score >= 3.0,
+        field_verification_scope=(
+            "Close-range substructure inspection for crack mapping and settlement survey"
+            if c4_score is None or c4_score >= 3.0
+            else None
+        ),
         data_sources_used=["Street View vision analysis"] if visual else [],
+        assessment_status="assessed" if c4_score is not None else "not_assessed",
     ))
 
     # ── Criterion 5: Superstructure Primary Elements ─────────────────
@@ -254,20 +324,20 @@ def compute_criterion_scores(
         if not c5_findings:
             c5_findings = [f"Cracking: {visual.cracking.score}/5, Corrosion: {visual.corrosion.score}/5"]
     else:
-        c5_score = 3.0
+        c5_score = None
         c5_conf = "low"
         c5_findings = ["No visual assessment of superstructure"]
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=5,
         criterion_name="Superstructure Primary Elements (Fatigue, Section Loss)",
         score=c5_score,
         confidence=c5_conf,
         key_findings=c5_findings,
-        requires_field_verification=c5_score >= 3.5,
-        field_verification_scope="NDT inspection for fatigue crack characterization" if c5_score >= 3.5 else None,
-        failure_mode_probability=_score_to_probability(c5_score),
+        requires_field_verification=(c5_score is None) or c5_score >= 3.5,
+        field_verification_scope="NDT inspection for fatigue crack characterization" if (c5_score is None) or c5_score >= 3.5 else None,
         data_sources_used=["Street View vision analysis"] if visual else [],
+        assessment_status="assessed" if c5_score is not None else "not_assessed",
     ))
 
     # ── Criterion 6: Overall Stability ───────────────────────────────
@@ -278,19 +348,24 @@ def compute_criterion_scores(
     if structural and structural.stability_concerns:
         c6_findings = structural.stability_concerns
         c6_scores.append(min(5.0, 2.0 + len(structural.stability_concerns)))
-    c6_score = max(c6_scores) if c6_scores else 2.0
+    c6_score = max(c6_scores) if c6_scores else None
     if not c6_findings:
-        c6_findings = ["No specific stability concerns identified from remote assessment"]
+        c6_findings = (
+            ["No specific stability concerns identified from remote assessment"]
+            if c6_score is not None
+            else ["Overall stability could not be assessed without visual or structural evidence"]
+        )
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=6,
         criterion_name="Overall Stability (Buckling, Overturning, Progressive Collapse)",
         score=c6_score,
         confidence="low",
         key_findings=c6_findings,
-        requires_field_verification=c6_score >= 3.0,
-        failure_mode_probability=_score_to_probability(c6_score),
+        requires_field_verification=(c6_score is None) or c6_score >= 3.0,
+        field_verification_scope="Stability review requires close-range inspection and structural verification" if c6_score is None else None,
         data_sources_used=(["Street View vision"] if visual else []) + (["Structural type classification"] if structural else []),
+        assessment_status="estimated" if c6_score is not None else "not_assessed",
     ))
 
     # ── Criterion 7: Durability / Degradation ────────────────────────
@@ -308,19 +383,23 @@ def compute_criterion_scores(
         c7_findings = [f"Visual corrosion: {visual.corrosion.score}/5, Spalling: {visual.spalling.score}/5"]
         c7_sources = ["Street View vision analysis"]
     else:
-        c7_score = 3.0
+        c7_score = None
         c7_conf = "low"
         c7_findings = ["No degradation assessment performed"]
         c7_sources = []
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=7,
         criterion_name="Durability / Time-Dependent Degradation",
         score=c7_score,
         confidence=c7_conf,
         key_findings=c7_findings,
-        failure_mode_probability=_score_to_probability(c7_score),
         data_sources_used=c7_sources,
+        assessment_status=(
+            "assessed" if degradation and c7_score is not None
+            else "estimated" if visual and c7_score is not None
+            else "not_assessed"
+        ),
     ))
 
     # ── Criterion 8: Bearings, Joints, Expansion Devices ─────────────
@@ -340,18 +419,18 @@ def compute_criterion_scores(
         if not c8_findings:
             c8_findings = [f"Surface degradation (joint proxy): {visual.surface_degradation.score}/5"]
     else:
-        c8_score = 3.0
+        c8_score = None
         c8_conf = "low"
         c8_findings = ["No visual assessment of bearings/joints"]
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=8,
         criterion_name="Bearings, Joints, and Expansion Devices",
         score=c8_score,
         confidence=c8_conf,
         key_findings=c8_findings,
-        failure_mode_probability=_score_to_probability(c8_score),
         data_sources_used=["Street View vision analysis"] if visual else [],
+        assessment_status="assessed" if c8_score is not None else "not_assessed",
     ))
 
     # ── Criterion 9: Deck / Slab / Wearing Surface ──────────────────
@@ -365,31 +444,31 @@ def compute_criterion_scores(
             f"Drainage: {visual.drainage.score}/5",
         ]
     else:
-        c9_score = 3.0
+        c9_score = None
         c9_conf = "low"
         c9_findings = ["No visual assessment of deck"]
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=9,
         criterion_name="Deck / Slab / Wearing Surface",
         score=c9_score,
         confidence=c9_conf,
         key_findings=c9_findings,
-        failure_mode_probability=_score_to_probability(c9_score),
         data_sources_used=["Street View vision analysis"] if visual else [],
+        assessment_status="assessed" if c9_score is not None else "not_assessed",
     ))
 
     # ── Criterion 10: Stiffness / Serviceability ─────────────────────
     # Limited remote capability — proxy-based only
     # Per plan: missing data must NOT default to "OK" — use 3.0 (unknown) with low confidence
-    c10_score = 3.0  # unknown = assume moderate risk, not OK
+    c10_score = None
     c10_conf = "low"
-    c10_findings = ["No direct stiffness/deflection measurement available remotely"]
+    c10_findings = ["No direct stiffness/deflection measurement is available from remote imagery"]
     if visual and visual.structural_deformation.score >= 3:
-        c10_score = visual.structural_deformation.score - 0.5
+        c10_score = float(visual.structural_deformation.score)
         c10_findings.append(f"Deformation detected (proxy): {visual.structural_deformation.score}/5")
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=10,
         criterion_name="Stiffness and Serviceability (Deflections, Vibrations)",
         score=c10_score,
@@ -397,8 +476,8 @@ def compute_criterion_scores(
         key_findings=c10_findings,
         requires_field_verification=True,
         field_verification_scope="SHM sensors or surveying needed for actual deflection/frequency measurement",
-        failure_mode_probability=_score_to_probability(c10_score),
-        data_sources_used=["Street View vision (deformation proxy)"] if visual else [],
+        data_sources_used=["Street View vision (deformation proxy)"] if visual and c10_score is not None else [],
+        assessment_status="estimated" if c10_score is not None else "not_assessed",
     ))
 
     # ── Criterion 11: Ancillary / Protective Systems ─────────────────
@@ -414,18 +493,18 @@ def compute_criterion_scores(
         c11_score = max(c11_scores)
         c11_conf = "medium"
     else:
-        c11_score = 3.0  # unknown = assume moderate, not OK
+        c11_score = None
         c11_conf = "low"
         c11_findings = ["No visual assessment of ancillary systems"]
 
-    results.append(CriterionResult(
+    results.append(_build_criterion_result(
         criterion_rank=11,
         criterion_name="Ancillary / Protective Systems (Railings, Drainage, Coatings)",
         score=c11_score,
         confidence=c11_conf,
         key_findings=c11_findings,
-        failure_mode_probability=_score_to_probability(c11_score),
         data_sources_used=["Street View vision analysis"] if visual else [],
+        assessment_status="assessed" if c11_score is not None else "not_assessed",
     ))
 
     return results
@@ -436,16 +515,14 @@ def compute_weighted_risk_score(criteria: list[CriterionResult]) -> tuple[float,
     Compute confidence-weighted overall risk score from criterion results.
     Returns (score, overall_confidence).
     """
-    weight_keys = list(CRITERION_WEIGHTS.keys())
     total_score = 0.0
     total_weight = 0.0
     confidence_sum = 0.0
 
-    for i, criterion in enumerate(criteria):
-        if i < len(weight_keys):
-            weight = CRITERION_WEIGHTS[weight_keys[i]]
-        else:
-            weight = 0.03  # fallback for any extra criteria
+    for criterion in criteria:
+        if criterion.score is None or not criterion.included_in_overall_risk:
+            continue
+        weight = RANK_TO_WEIGHT.get(criterion.criterion_rank, 0.03)
 
         conf_factor = CONFIDENCE_FACTORS.get(criterion.confidence, 0.4)
 
@@ -475,8 +552,10 @@ def compute_weighted_risk_score(criteria: list[CriterionResult]) -> tuple[float,
     return overall_score, overall_confidence
 
 
-def _score_to_probability(score: float) -> str:
+def _score_to_probability(score: Optional[float]) -> str:
     """Map 1-5 score to qualitative failure-mode probability."""
+    if score is None:
+        return "unknown"
     if score >= 4.5:
         return "critical"
     elif score >= 3.5:

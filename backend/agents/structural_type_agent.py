@@ -33,7 +33,7 @@ REDUNDANCY_TABLE: dict[str, tuple[str, bool]] = {
     "cable_stayed":  ("MEDIUM", False),   # depends on cable count; multi-cable = redundant
     "suspension":    ("LOW",    True),    # main cables are NSTM
     "culvert":       ("HIGH",   False),   # buried structure — inherently redundant
-    "unknown":       ("MEDIUM", False),  # unknown = assume MEDIUM, not HIGH (avoid false reassurance)
+    "unknown":       ("unknown", False),
 }
 
 # Map vision-model girder_config → REDUNDANCY_TABLE key
@@ -107,6 +107,12 @@ def _estimate_capacity_class(
     road_class = (bridge.road_class or "").lower()
     mat = material.lower()
 
+    if structure_system == "unknown":
+        return (
+            "unknown",
+            "No posted weight limit and no reliable structural classification; remote capacity class cannot be assigned defensibly.",
+        )
+
     # Road class signals
     is_motorway = any(k in road_class for k in ("motorway", "trunk", "primary"))
     is_minor = any(k in road_class for k in ("track", "path", "service", "footway", "cycleway"))
@@ -159,6 +165,9 @@ def _capacity_vs_demand(
     road_class = (bridge.road_class or "").lower()
     is_heavy_demand = any(k in road_class for k in ("motorway", "trunk", "primary"))
     is_light_demand = any(k in road_class for k in ("track", "path", "service", "footway", "cycleway", "residential"))
+
+    if capacity_class == "unknown":
+        return "unknown", "Capacity class is unknown, so capacity versus demand cannot be determined remotely."
 
     if capacity_class == "heavy":
         return "adequate", "Heavy capacity bridge on high-demand road — capacity adequate."
@@ -313,6 +322,8 @@ async def assess_structural_type(
         f"Redundancy table: {redundancy_class}. "
         f"{'Fracture-critical members present.' if fracture_critical else 'No fracture-critical members identified.'}"
     )
+    if redundancy_class == "unknown":
+        redundancy_reasoning += " Remote evidence was insufficient to classify load-path redundancy."
 
     # -----------------------------------------------------------------------
     # 5. Capacity class estimation
@@ -330,6 +341,8 @@ async def assess_structural_type(
         redundancy_class == "LOW"
         or capacity_demand_flag in ("marginal", "insufficient")
         or fracture_critical
+        or redundancy_class == "unknown"
+        or capacity_demand_flag == "unknown"
     )
 
     # -----------------------------------------------------------------------

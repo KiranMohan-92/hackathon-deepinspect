@@ -7,7 +7,9 @@ class CriterionResult(BaseModel):
     """Assessment result for a single ranked inspection criterion."""
     criterion_rank: int                    # 1-11 (impact order)
     criterion_name: str                    # e.g., "Scour / Foundations / Channel Stability"
-    score: float                           # 1.0-5.0
+    score: Optional[float] = None          # 1.0-5.0 when assessed; None when not assessed
+    assessment_status: str = "assessed"    # "assessed" | "estimated" | "not_assessed"
+    included_in_overall_risk: bool = True
     confidence: str = "low"                # "low" | "medium" | "high"
     data_sources_used: list[str] = []      # e.g., ["OSM waterway tags", "IMGW flood map", "Street View vision"]
     key_findings: list[str] = []           # concise evidence statements

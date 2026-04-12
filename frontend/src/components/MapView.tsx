@@ -8,12 +8,24 @@ import { Crosshair, AlertTriangle } from "lucide-react";
 import useAppStore from "../store/useAppStore";
 import { RISK_COLORS, RISK_MARKER_SIZE } from "../utils/riskColors";
 import { useBridgeScan } from "../hooks/useBridgeScan";
-import { BridgeSummary, BridgeRiskReport, RiskTier } from "../types";
+import { BridgeSummary, BridgeRiskReport, RiskTier, ThemeMode } from "../types";
 
 const DEFAULT_CENTER: [number, number] = [51.1079, 17.0385];
 const DEFAULT_ZOOM = 6;
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const TIERS = ["CRITICAL", "HIGH", "MEDIUM", "OK"];
+const TILE_THEMES: Record<ThemeMode, { url: string; attribution: string }> = {
+  dark: {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  },
+  light: {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  },
+};
 
 function priorityColor(score: number) {
   if (score >= 4.5) return "rgba(0, 229, 255, 0.6)";
@@ -204,7 +216,11 @@ function HoverCard({ bridge, report, pos, containerRef }: { bridge: BridgeSummar
       <div className="flex justify-center -mt-px">
         <div
           className="w-2.5 h-2.5 rotate-45"
-          style={{ background: "rgba(12, 14, 22, 0.85)", borderRight: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          style={{
+            background: "rgb(var(--color-glass) / 0.85)",
+            borderRight: "1px solid rgb(var(--color-white) / 0.06)",
+            borderBottom: "1px solid rgb(var(--color-white) / 0.06)",
+          }}
         />
       </div>
     </div>
@@ -327,9 +343,9 @@ function FilterBar({ allBridges, analyzedBridges, activeFilter, onFilter }: { al
             aria-pressed={active}
             className="px-3 py-1 text-2xs font-mono font-bold rounded-full transition-all border"
             style={{
-              backgroundColor: active ? c.bg : "rgba(12, 14, 22, 0.85)",
-              color: active ? c.text : "rgba(255,255,255,0.4)",
-              borderColor: active ? c.border : "rgba(255,255,255,0.06)",
+              backgroundColor: active ? c.bg : "rgb(var(--color-glass) / 0.85)",
+              color: active ? c.text : "rgb(var(--color-dim))",
+              borderColor: active ? c.border : "rgb(var(--color-white) / 0.06)",
               boxShadow: active ? c.glow : "none",
               backdropFilter: "blur(12px)",
             }}
@@ -348,6 +364,7 @@ export default function MapView() {
   const checkedBridgeIds = useAppStore((s) => s.checkedBridgeIds);
   const selectedBridgeId = useAppStore((s) => s.selectedBridgeId);
   const activeFilter = useAppStore((s) => s.activeFilter);
+  const theme = useAppStore((s) => s.theme);
   const setActiveFilter = useAppStore((s) => s.setActiveFilter);
   const setSelectedBridgeId = useAppStore((s) => s.setSelectedBridgeId);
 
@@ -360,6 +377,7 @@ export default function MapView() {
   const filteredBridges = activeFilter === "ALL"
     ? allBridges
     : allBridges.filter((b) => analyzedBridges[b.osm_id]?.risk_tier === activeFilter);
+  const mapTiles = TILE_THEMES[theme];
 
   const handleHover = useCallback((bridge: BridgeSummary, report: BridgeRiskReport | null, pos: { x: number; y: number }) => {
     setHoveredBridge(bridge);
@@ -373,7 +391,7 @@ export default function MapView() {
     <div ref={containerRef} className="relative flex-1 min-w-0 overflow-hidden bg-void">
       <div className="absolute inset-0 pointer-events-none z-0 opacity-20" 
            style={{ 
-             backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px)', 
+             backgroundImage: 'radial-gradient(rgb(var(--map-grid-color) / 0.15) 1px, transparent 1px)', 
              backgroundSize: '24px 24px' 
            }} 
       />
@@ -403,10 +421,7 @@ export default function MapView() {
         style={{ height: "100%", width: "100%", zIndex: 10 }}
         zoomControl={true}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
+        <TileLayer key={theme} attribution={mapTiles.attribution} url={mapTiles.url} />
         <MapController bridges={allBridges} />
         <BoundsTracker allBridges={allBridges} onUpdate={setVisibleBridges} />
         <BridgeMarkers

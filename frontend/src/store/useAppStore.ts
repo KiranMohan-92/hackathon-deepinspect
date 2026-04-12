@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { AppState, BridgeSummary, BridgeRiskReport, ScanProgressItem, ImageAnalysisResult, RiskTier } from "../types";
+import { AppState, BridgeSummary, BridgeRiskReport, ScanProgressItem, ImageAnalysisResult, RiskTier, ThemeMode } from "../types";
 
 const useAppStore = create<AppState>()(
   persist(
@@ -15,6 +15,7 @@ const useAppStore = create<AppState>()(
       isLoading: false,
       error: null,
       activeFilter: "ALL",
+      theme: "light",
       scanProgress: [],
 
       imageAnalysis: null,
@@ -33,6 +34,9 @@ const useAppStore = create<AppState>()(
       setLoading: (isLoading: boolean) => set({ isLoading }),
       setError: (error: string | null) => set({ error }),
       setActiveFilter: (activeFilter: RiskTier) => set({ activeFilter }),
+      setTheme: (theme: ThemeMode) => set({ theme }),
+      toggleTheme: () =>
+        set((state) => ({ theme: state.theme === "dark" ? "light" : "dark" })),
       addScanProgress: (item: ScanProgressItem) =>
         set((state) => ({ scanProgress: [...state.scanProgress, item] })),
       clearScanProgress: () => set({ scanProgress: [] }),
@@ -118,6 +122,7 @@ const useAppStore = create<AppState>()(
         bridges: state.bridges,
         analyzedBridges: state.analyzedBridges,
         activeFilter: state.activeFilter,
+        theme: state.theme,
       }),
     }
   )

@@ -52,12 +52,15 @@ async def assess_scour(
             })
 
     data_sources: list[str] = []
+    waterway_query_succeeded = False
+    visual_assessment_ran = False
 
     # ── 1. Query OSM for nearby waterways ────────────────────────────────────
     await emit("Querying OSM Overpass for waterways within 100 m…")
     waterways: list[dict] = []
     try:
         waterways = await check_waterway_proximity(bridge.lat, bridge.lon, radius_m=100)
+        waterway_query_succeeded = True
         if waterways:
             data_sources.append("OpenStreetMap Overpass (waterway tags)")
             await emit(f"Found {len(waterways)} waterway element(s) near bridge.")
@@ -165,6 +168,7 @@ async def assess_scour(
 
             if best_result:
                 vision_result = best_result
+                visual_assessment_ran = True
                 data_sources.append("Google Street View + Gemini Vision")
         else:
             await emit("No Street View images available for scour visual analysis.")
@@ -178,27 +182,31 @@ async def assess_scour(
     visual_indicators: list[str] = vision_result.get("visual_scour_indicators", [])
     countermeasures:   list[str] = vision_result.get("scour_countermeasures", [])
 
-    # Derive risk score: start from vision score, bump up if HIGH flood zone
-    vision_score: float = vision_result.get("scour_risk_score", 1.0)
-    if flood_zone == "HIGH" and vision_score < 3.0:
-        # Waterway proximity alone warrants at least a moderate score
-        vision_score = max(vision_score, 2.5)
-    elif flood_zone == "MEDIUM" and vision_score < 2.0:
-        vision_score = max(vision_score, 2.0)
-    elif not crosses_water:
-        # No waterway nearby — scour risk is minimal
-        vision_score = min(vision_score, 1.5)
+    assessment_status = "not_assessed"
+    scour_score: float | None = None
 
-    # Confidence: high if vision ran + waterway found, medium if only one, low if neither
-    if vision_result and crosses_water:
+    if waterway_query_succeeded or visual_assessment_ran:
+        assessment_status = "assessed" if waterway_query_succeeded else "estimated"
+        scour_score = vision_result.get("scour_risk_score", 1.0)
+        if flood_zone == "HIGH" and scour_score < 3.0:
+            scour_score = max(scour_score, 2.5)
+        elif flood_zone == "MEDIUM" and scour_score < 2.0:
+            scour_score = max(scour_score, 2.0)
+        elif waterway_query_succeeded and not crosses_water:
+            scour_score = min(scour_score, 1.5)
+
+    # Confidence: high if vision ran + waterway found, medium if at least one evidence stream ran, low if neither
+    if visual_assessment_ran and crosses_water:
         confidence = vision_result.get("confidence", "medium")
-    elif vision_result or crosses_water:
+    elif waterway_query_succeeded or visual_assessment_ran:
         confidence = "medium"
     else:
         confidence = "low"
 
     # Field inspection scope
-    if crosses_water:
+    if assessment_status == "not_assessed":
+        field_scope = "Hydrological assessment could not be completed remotely; field hydrology review required before scoring this criterion."
+    elif crosses_water:
         field_scope = (
             vision_result.get("field_inspection_scope")
             or "Underwater sonar survey for pier scour depth; geotechnical probe for foundation exposure"
@@ -224,16 +232,24 @@ async def assess_scour(
         waterline_marks=vision_result.get("waterline_marks", False),
         scour_countermeasures=countermeasures,
         countermeasure_condition=vision_result.get("countermeasure_condition"),
-        scour_risk_score=round(vision_score, 2),
+        scour_risk_score=round(scour_score, 2) if scour_score is not None else None,
+        assessment_status=assessment_status,
         confidence=confidence,
-        requires_field_inspection=crosses_water,
+        requires_field_inspection=(assessment_status == "not_assessed") or crosses_water,
         field_inspection_scope=field_scope,
         data_sources=data_sources,
+        waterway_query_succeeded=waterway_query_succeeded,
+        visual_assessment_ran=visual_assessment_ran,
     )
 
     await emit(
-        f"Scour assessment complete — risk score {assessment.scour_risk_score:.1f}/5.0 "
-        f"(flood zone: {assessment.flood_zone or 'unknown'}, confidence: {assessment.confidence})"
+        "Scour assessment complete — "
+        + (
+            f"risk score {assessment.scour_risk_score:.1f}/5.0 "
+            if assessment.scour_risk_score is not None
+            else "criterion not assessed "
+        )
+        + f"(flood zone: {assessment.flood_zone or 'unknown'}, confidence: {assessment.confidence})"
     )
     return assessment
 

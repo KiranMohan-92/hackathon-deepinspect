@@ -1,4 +1,5 @@
-export type RiskTier = 'Low' | 'Medium' | 'High' | 'Critical' | 'ALL';
+export type RiskTier = 'OK' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'ALL';
+export type ThemeMode = 'dark' | 'light';
 
 export interface BridgeSummary {
   osm_id: string;
@@ -93,6 +94,7 @@ export interface AppState {
   isLoading: boolean;
   error: string | null;
   activeFilter: RiskTier;
+  theme: ThemeMode;
   scanProgress: ScanProgressItem[];
   
   imageAnalysis: ImageAnalysisResult | null;
@@ -102,6 +104,8 @@ export interface AppState {
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   setActiveFilter: (activeFilter: RiskTier) => void;
+  setTheme: (theme: ThemeMode) => void;
+  toggleTheme: () => void;
   addScanProgress: (item: ScanProgressItem) => void;
   clearScanProgress: () => void;
   

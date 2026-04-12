@@ -2,6 +2,15 @@ import { useEffect, useRef } from "react";
 import useAppStore from "../store/useAppStore";
 import { RiskTier } from "../types";
 
+const FILTER_MAP: Record<string, RiskTier> = {
+  ALL: "ALL",
+  OK: "OK",
+  LOW: "OK",
+  MEDIUM: "MEDIUM",
+  HIGH: "HIGH",
+  CRITICAL: "CRITICAL",
+};
+
 export default function useUrlState() {
   const selectedBridgeId = useAppStore((s) => s.selectedBridgeId);
   const activeFilter = useAppStore((s) => s.activeFilter);
@@ -22,8 +31,11 @@ export default function useUrlState() {
     if (bridge) {
       pendingBridgeId.current = bridge;
     }
-    if (filter && ["ALL", "Critical", "High", "Medium", "Low"].includes(filter)) {
-      setActiveFilter(filter as RiskTier);
+    if (filter) {
+      const normalized = FILTER_MAP[filter.toUpperCase()];
+      if (normalized) {
+        setActiveFilter(normalized);
+      }
     }
   }, [setSelectedBridgeId, setActiveFilter]);
 

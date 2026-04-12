@@ -1,24 +1,28 @@
 /** @type {import('tailwindcss').Config} */
+const withAlpha = (variable) => `rgb(var(${variable}) / <alpha-value>)`;
+
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        void: "#06060a",
-        "void-light": "#0c0e16",
-        "void-lighter": "#12141e",
+        white: withAlpha("--color-white"),
+        black: withAlpha("--color-black"),
+        void: withAlpha("--color-void"),
+        "void-light": withAlpha("--color-void-light"),
+        "void-lighter": withAlpha("--color-void-lighter"),
         accent: {
-          DEFAULT: "#00e5ff",
-          dim: "#00b8d4",
-          muted: "rgba(0, 229, 255, 0.15)",
-          glow: "rgba(0, 229, 255, 0.3)",
+          DEFAULT: withAlpha("--color-accent"),
+          dim: withAlpha("--color-accent-dim"),
+          muted: "rgb(var(--color-accent) / 0.15)",
+          glow: "rgb(var(--color-accent) / 0.3)",
         },
         glass: {
-          DEFAULT: "rgba(12, 14, 22, 0.85)",
-          light: "rgba(20, 24, 38, 0.75)",
-          heavy: "rgba(6, 6, 10, 0.92)",
-          border: "rgba(255, 255, 255, 0.06)",
-          "border-hover": "rgba(255, 255, 255, 0.12)",
+          DEFAULT: "rgb(var(--color-glass) / 0.85)",
+          light: "rgb(var(--color-glass-light) / 0.75)",
+          heavy: "rgb(var(--color-glass-heavy) / 0.92)",
+          border: "rgb(var(--color-white) / 0.06)",
+          "border-hover": "rgb(var(--color-white) / 0.12)",
         },
         severity: {
           critical: "#ff1744",
@@ -35,12 +39,12 @@ export default {
           "ok-glow": "rgba(0, 230, 118, 0.4)",
         },
         surface: {
-          1: "rgba(255, 255, 255, 0.03)",
-          2: "rgba(255, 255, 255, 0.05)",
-          3: "rgba(255, 255, 255, 0.08)",
+          1: "rgb(var(--color-white) / 0.03)",
+          2: "rgb(var(--color-white) / 0.05)",
+          3: "rgb(var(--color-white) / 0.08)",
         },
-        dim: "rgba(255, 255, 255, 0.4)",
-        muted: "rgba(255, 255, 255, 0.6)",
+        dim: withAlpha("--color-dim"),
+        muted: withAlpha("--color-muted"),
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
@@ -55,8 +59,8 @@ export default {
         "glass-heavy": "20px",
       },
       boxShadow: {
-        glass: "0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4)",
-        "glass-hover": "0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 32px rgba(0, 0, 0, 0.5)",
+        glass: "0 0 0 1px rgb(var(--color-white) / 0.06), 0 4px 24px rgb(var(--color-shadow) / 0.24)",
+        "glass-hover": "0 0 0 1px rgb(var(--color-white) / 0.12), 0 8px 32px rgb(var(--color-shadow) / 0.24)",
         "glow-cyan": "0 0 20px rgba(0, 229, 255, 0.3), 0 0 60px rgba(0, 229, 255, 0.1)",
         "glow-red": "0 0 20px rgba(255, 23, 68, 0.3), 0 0 60px rgba(255, 23, 68, 0.1)",
         "glow-orange": "0 0 20px rgba(255, 109, 0, 0.3), 0 0 60px rgba(255, 109, 0, 0.1)",
